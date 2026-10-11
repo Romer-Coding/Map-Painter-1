@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Strategy Offline Interactive Map Engine</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0e14; /* Clean dark background fitting a grand strategy game */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        /* Loader Overlays */
+        #loader {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(11, 14, 20, 0.95);
+            color: #e0e6ed;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #1f2937;
+            border-top: 5px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="spinner"></div>
+        <div id="loader-text">Initializing Game Engine and Loading Topography Data...</div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+
+    <script>
+        // Global engine configuration parameters
+        const ZOOM_THRESHOLD = 6;
+        let countryLookup = {};
+        let map, municipalityLayer, countryLayer;
+        let lastZoomAboveThreshold = null; // tracks whether we were already above/below threshold, to skip redundant restyles
+
+        // 1. Deterministic String Hashing for Consistent Country Colorization (HSL spectrum)
+        function getCountryColor(shapeGroup) {
+            if (!shapeGroup) return 'hsl(0, 0%, 50%)';
+            let hash = 0;
+            for (let i = 0; i < shapeGroup.length; i++) {
+                hash = shapeGroup.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            // Derive balanced HSL values to ensure visual distinction and visibility against dark mode background
+            const hue = Math.abs(hash) % 360;
+            const saturation = 55 + (Math.abs(hash >> 8) % 20); // 55% - 75%
+            const lightness = 40 + (Math.abs(hash >> 16) % 15);  // 40% - 55%
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        // 2. Initialize Leaflet Map Engine using HTML Canvas Renderer
+        function initMap() {
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 3,
+                minZoom: 2,
+                maxZoom: 10,
+                maxBounds: [[-90, -180], [90, 180]],
+                maxBoundsViscosity: 1.0,
+                preferCanvas: true // CRITICAL: Enables rapid processing of 49k+ features
+            });
+        }
+
+        // 3. Process TopoJSON and Render Game Layers
+        async function loadMapData() {
+            try {
+                // Parallel data ingestion
+                updateLoaderText("Downloading Assets (custom_geo.json & lookup entries)...");
+                const [lookupResponse, topoResponse] = await Promise.all([
+                    fetch('country_lookup.json'),
+                    fetch('custom_geo.json')
+                ]);
+
+                countryLookup = await lookupResponse.json();
+                const topology = await topoResponse.json();
+
+                updateLoaderText("Parsing TopoJSON Geometries...");
+                const targetObject = topology.objects.geoBoundariesCGAZ_ADM2;
+
+                // Extract standalone municipality GeoJSON features
+                const municipalityGeoJSON = topojson.feature(topology, targetObject);
+
+                // --- OPTIMIZED LAYER GROUPING & TOPOJSON DISSOLVE MERGE ---
+                updateLoaderText("Generating Country Borders (Dissolving internal boundaries)...");
+
+                // Group individual geometry references by country code (shapeGroup)
+                const geometriesByCountry = {};
+                targetObject.geometries.forEach((geom) => {
+                    const group = geom.properties.shapeGroup;
+                    if (!geometriesByCountry[group]) {
+                        geometriesByCountry[group] = [];
+                    }
+                    geometriesByCountry[group].push(geom);
+                });
+
+                // Construct a custom synthetic GeoJSON FeatureCollection containing only merged country hulls
+                const countryMergedFeatures = {
+                    type: "FeatureCollection",
+                    features: []
+                };
+
+                for (const [shapeGroup, geometries] of Object.entries(geometriesByCountry)) {
+                    // Injecting TopoJSON utility to dynamically strip out borders intersecting matching keys
+                    const mergedGeometry = topojson.merge(topology, geometries);
+                    countryMergedFeatures.features.push({
+                        type: "Feature",
+                        properties: { shapeGroup: shapeGroup },
+                        geometry: mergedGeometry
+                    });
+                }
+
+                // --- RENDERING LEAFLET SECTIONS ---
+                updateLoaderText("Composing Map Layout Layers...");
+
+                // Base Layer: Municipalities (Dynamic border visibility dependent on zoom)
+                municipalityLayer = L.geoJSON(municipalityGeoJSON, {
+                    style: function(feature) {
+                        const currentZoom = map.getZoom();
+                        const countryCode = feature.properties.shapeGroup;
+                        return {
+                            fillColor: getCountryColor(countryCode),
+                            fillOpacity: 0.85,
+                            // At low zoom, set line size to zero preventing black blob coverage artifacting
+                            color: '#111827',
+                            weight: currentZoom >= ZOOM_THRESHOLD ? 0.4 : 0,
+                            opacity: 0.6
+                        };
+                    },
+                    onEachFeature: onEachMunicipality
+                }).addTo(map);
+
+                // Overlapping Layer: Country Boundaries (Crisp contrast outline, constant visibility)
+                countryLayer = L.geoJSON(countryMergedFeatures, {
+                    style: function() {
+                        return {
+                            color: '#06080c', // Prominent contrasting boundary edge line
+                            weight: 1.5,
+                            fillOpacity: 0,
+                            interactive: false // Passes user inputs directly down to underlying clickable administrative elements
+                        };
+                    }
+                }).addTo(map);
+
+                // Track initial zoom bucket so the first zoomend doesn't do a redundant restyle pass
+                lastZoomAboveThreshold = map.getZoom() >= ZOOM_THRESHOLD;
+
+                // Attach dynamic resize handlers hooked directly into browser canvas matrix calculations
+                map.on('zoomend', handleZoomStateChange);
+
+                // Teardown pre-render view blocker
+                document.getElementById('loader').style.display = 'none';
+
+            } catch (error) {
+                console.error("Initialization failure within offline client asset chain:", error);
+                updateLoaderText("Error loading map layout. Ensure local files match relative layout structure and web server permissions allow fetching local assets.");
+            }
+        }
+
+        // 4. Interaction Events / Map Mechanics
+        function onEachMunicipality(feature, layer) {
+            const props = feature.properties;
+            const countryName = countryLookup[props.shapeGroup] || props.shapeGroup || "Unknown Territory";
+            const adminName = props.shapeName || "Unnamed Province";
+
+            // Tooltip composition optimizing fast context evaluation over high poly matrices
+            layer.bindTooltip(`<strong>${adminName}</strong><br/><span style="color:#9ca3af;">${countryName} (${props.shapeType})</span>`, {
+                sticky: true,
+                direction: 'auto',
+                opacity: 0.95
+            });
+
+            // Interactive highlights for grand strategy context
+            layer.on({
+                mouseover: function(e) {
+                    const l = e.target;
+                    l.setStyle({
+                        fillOpacity: 1.0,
+                        color: '#ffffff',
+                        weight: 1.0
+                    });
+                    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                        l.bringToFront();
+                    }
+                    if (countryLayer) countryLayer.bringToFront(); // Ensure global rims always overlay details
+                },
+                mouseout: function(e) {
+                    municipalityLayer.resetStyle(e.target);
+                }
+            });
+        }
+
+        // 5. Reactive Zoom Logic
+        // PATCH: only touch the ~49k layers when we actually cross the ZOOM_THRESHOLD boundary,
+        // instead of re-styling every layer on every single zoom tick. This is the difference
+        // between a barely-noticeable style flip and a multi-second stutter each time you zoom.
+        function handleZoomStateChange() {
+            const currentZoom = map.getZoom();
+            const nowAboveThreshold = currentZoom >= ZOOM_THRESHOLD;
+
+            if (nowAboveThreshold === lastZoomAboveThreshold) {
+                return; // still in the same bucket, nothing to restyle
+            }
+            lastZoomAboveThreshold = nowAboveThreshold;
+
+            const newWeight = nowAboveThreshold ? 0.4 : 0;
+            municipalityLayer.eachLayer(function(layer) {
+                layer.setStyle({ weight: newWeight });
+            });
+        }
+
+        function updateLoaderText(text) {
+            document.getElementById('loader-text').innerText = text;
+        }
+
+        // Run engine pipeline on initialization
+        window.onload = function() {
+            initMap();
+            loadMapData();
+        };
+    </script>
+</body>
+</html>

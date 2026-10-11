@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Painter 1 — Play</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="static/menu.css">
+</head>
+<body>
+
+<!-- ============================================================
+     MENU SHELL — Games / Presets / Flags. This is the landing
+     screen. Selecting a country (or building a custom entity)
+     writes straight into world_map_webgl.html's own localStorage
+     GameState and redirects there — see launchGame() in menu.js.
+     (This used to POST to a separate Flask backend and reveal a
+     totally different text-only game screen; that flow is gone —
+     this menu is now the front door to the actual map game.)
+     ============================================================ -->
+<div id="menu-shell">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="brand">MP1</div>
+      <div class="nav">
+        <button class="nav-item active" data-screen="games" onclick="go('games')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M7 10v4M5 12h4M15 11h.01M18 13h.01"/></svg>
+          <span>Games</span>
+        </button>
+        <button class="nav-item" data-screen="presets" onclick="go('presets')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+          <span>Presets</span>
+        </button>
+        <button class="nav-item" data-screen="flags" onclick="go('flags')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V4m0 0h13l-2.5 4L17 12H4"/></svg>
+          <span>Flags</span>
+        </button>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="wallet"><span class="coin"></span> Offline mode</div>
+      <div class="avatar">P</div>
+    </div>
+  </div>
+
+  <main>
+    <!-- GAMES -->
+    <section class="screen active" id="screen-games">
+      <div class="page-head">
+        <div class="page-title">Your Games <span class="dim">/ All</span></div>
+      </div>
+      <div class="section-title">Continue Playing</div>
+      <div class="card-row" id="continue-row"></div>
+    </section>
+
+    <!-- PRESETS -->
+    <section class="screen" id="screen-presets">
+      <div class="page-head">
+        <div class="page-title">Presets</div>
+      </div>
+      <div class="hero" id="hero-banner">
+        <div class="hero-content">
+          <h2 id="hero-title">Modern Day</h2>
+          <div class="stats" id="hero-stats"></div>
+          <p id="hero-desc"></p>
+          <button class="btn btn-primary" onclick="openPresetDetail(0)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg> Open
+          </button>
+        </div>
+        <div class="hero-dots" id="hero-dots"></div>
+      </div>
+      <div class="section-title">Most Played</div>
+      <div class="card-grid" id="preset-grid"></div>
+    </section>
+
+    <!-- PRESET DETAIL -->
+    <section class="screen" id="screen-detail">
+      <a class="back-link" onclick="go('presets')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M15 18l-6-6 6-6"/></svg> Back to Presets
+      </a>
+      <div class="detail-hero" id="detail-hero">
+        <div class="detail-heading">
+          <h1 id="detail-title">Modern Day</h1>
+          <div class="by" id="detail-by">by Map Painter 1</div>
+        </div>
+      </div>
+
+      <div class="stat-strip" id="detail-stats"></div>
+
+      <div class="action-row">
+        <span class="spacer"></span>
+        <button class="play-now" onclick="openPicker()"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg> Play Now</button>
+      </div>
+
+      <div class="detail-body">
+        <div class="info-block">
+          <h3>About This Preset <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg></h3>
+          <div class="tagset">
+            <span class="tag-pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg> <span id="detail-start"></span></span>
+            <span class="tag-pill" id="detail-type"></span>
+          </div>
+          <p id="detail-about"></p>
+        </div>
+        <div class="info-block">
+          <h3>The World Before Start Date</h3>
+          <p id="detail-before"></p>
+        </div>
+        <div class="info-block">
+          <h3>
+            Simulation Rules <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+            <button class="edit-toggle" id="rules-edit-btn" onclick="toggleRulesEdit(true)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit
+            </button>
+          </h3>
+          <p class="rules-hint">Constraints and guidelines for the AI. Define allowed actions, limits, objectives, and any special mechanics.</p>
+          <p id="detail-rules-view" class="rules-view"></p>
+          <div class="rules-edit-box" id="detail-rules-box">
+            <textarea id="detail-rules-edit"></textarea>
+            <div class="action-row">
+              <button class="btn btn-accent" onclick="saveRules()">Save Rules</button>
+              <button class="btn btn-ghost" onclick="toggleRulesEdit(false)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div class="info-block">
+          <h3>Region Map</h3>
+          <div class="map-frame" style="height:420px;">
+            <div class="map-tools"><div class="map-fab"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div></div>
+            <svg id="detail-map" viewBox="0 0 1000 500" style="width:100%;height:100%;"></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FLAGS -->
+    <section class="screen" id="screen-flags">
+      <div class="page-head"><div class="page-title">Flags</div></div>
+      <div class="flag-toolbar">
+        <div class="flag-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="flag-search-input" placeholder="Search flags..." oninput="renderFlags()"></div>
+      </div>
+      <div class="filter-pills">
+        <button class="fpill active" data-cat="all" onclick="setFlagCategory('all')">All</button>
+        <button class="fpill" data-cat="europe" onclick="setFlagCategory('europe')">European Flags</button>
+        <button class="fpill" data-cat="north_america" onclick="setFlagCategory('north_america')">North America</button>
+        <button class="fpill" data-cat="central_america" onclick="setFlagCategory('central_america')">Central America</button>
+        <button class="fpill" data-cat="caribbean" onclick="setFlagCategory('caribbean')">Caribbean</button>
+        <button class="fpill" data-cat="south_america" onclick="setFlagCategory('south_america')">South America</button>
+        <button class="fpill" data-cat="africa" onclick="setFlagCategory('africa')">African Flags</button>
+        <button class="fpill" data-cat="asia" onclick="setFlagCategory('asia')">Asian Flags</button>
+        <button class="fpill" data-cat="oceania" onclick="setFlagCategory('oceania')">Oceania</button>
+      </div>
+      <div class="flag-grid" id="flag-grid"></div>
+    </section>
+  </main>
+
+  <!-- Country picker overlay -->
+  <div class="overlay" id="picker-overlay">
+    <div class="picker-panel">
+      <div class="picker-tabs">
+        <button class="ptab active" data-tab="picks" onclick="setPickerTab('picks')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 6 6 .9-4.5 4.3 1 6.3L12 16.9 6.5 19.5l1-6.3L3 8.9 9 8z"/></svg> Picks
+        </button>
+        <button class="ptab" data-tab="all" onclick="setPickerTab('all')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> All polities
+        </button>
+        <button class="ptab" data-tab="custom" onclick="setPickerTab('custom')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Custom
+        </button>
+        <button class="picker-close" onclick="closePicker()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+
+      <div id="picker-list-wrap">
+        <div class="picker-search"><input id="country-search" placeholder="Search polities..." oninput="renderCountryList()"></div>
+        <div class="picker-list" id="country-list"></div>
+        <div class="picker-footer">
+          <div class="difficulty-row">
+            <span>Difficulty</span>
+            <select id="difficulty-select" onchange="mstate.difficulty=this.value">
+              <option>Very Easy</option><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Impossible</option>
+            </select>
+          </div>
+          <button class="btn btn-accent" style="width:100%;justify-content:center;" id="picker-cta" onclick="confirmPlay()" disabled>Select a country</button>
+        </div>
+      </div>
+
+      <div id="custom-wrap" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div class="custom-panel">
+          <p style="color:var(--m-text-dim);font-size:13px;line-height:1.55;">This is a complete sandbox — play from any entity or viewpoint you want. This adds a new entity to the game and the AI will automatically adjust.</p>
+
+          <label>Entity Name &amp; (Optional) Image</label>
+          <div class="entity-row">
+            <div class="img-upload"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg></div>
+            <input class="text-input" id="entity-name" placeholder="e.g. a country, faction, person...">
+          </div>
+
+          <label>Entity Color</label>
+          <div class="color-tabs"><button class="ctab active">Swatches</button></div>
+          <div class="swatch-grid" id="swatch-grid"></div>
+
+          <label>Entity Lore (Optional)<span class="hint">Describe the background, culture, goals, or characteristics of your entity. This is added to the simulation rules so the AI knows how to portray your entity.</span></label>
+          <textarea class="text-input" id="entity-lore" placeholder="A breakaway technocratic city-state founded by..."></textarea>
+
+          <label>Starting Regions (Optional)<span class="hint">Select regions your entity will start with. If none are selected, your entity starts without territory.</span></label>
+          <div class="region-chips" id="region-chips"></div>
+          <div class="region-add" style="margin-top:8px;cursor:pointer;" onclick="openPicker(); setPickerTab('all'); pickingRegionsFor='custom';">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Search regions or countries...
+          </div>
+        </div>
+        <div class="picker-footer">
+          <div class="difficulty-row">
+            <span>Difficulty</span>
+            <select id="difficulty-select-custom" onchange="mstate.difficulty=this.value">
+              <option>Very Easy</option><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Impossible</option>
+            </select>
+          </div>
+          <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="confirmCustom()">Create Entity &amp; Play</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="map-stage">
+      <svg id="worldmap" viewBox="0 0 1000 500"></svg>
+      <div class="selected-banner" id="selected-banner">
+        <span class="flag" id="banner-flag"></span>
+        <span class="name" id="banner-name"></span>
+      </div>
+      <div class="map-legend">Click a marker or a name in the list to select a polity</div>
+    </div>
+  </div>
+
+  <!-- Flag detail overlay -->
+  <div class="overlay" id="flag-detail-overlay">
+    <div class="picker-panel" style="width:420px;min-width:0;border-right:none;border-radius:14px;margin:auto;max-height:80vh;overflow-y:auto;">
+      <div class="picker-tabs">
+        <span style="font-weight:600;font-size:14px;">Flag details</span>
+        <button class="picker-close" onclick="closeFlagDetail()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div style="padding:16px;">
+        <div id="flag-detail-art" style="height:140px;border-radius:10px;overflow:hidden;margin-bottom:14px;"></div>
+        <div id="flag-detail-name" style="font-weight:600;font-size:16px;margin-bottom:4px;"></div>
+        <div id="flag-detail-years" style="font-size:12px;color:var(--m-text-faint);margin-bottom:12px;"></div>
+        <div id="flag-detail-desc" style="font-size:13px;line-height:1.6;color:var(--m-text-dim);margin-bottom:12px;"></div>
+        <div id="flag-detail-trigger" style="display:none;font-size:12px;padding:10px 12px;background:var(--m-bg-card);border-radius:8px;color:var(--m-text-dim);"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="static/preset_maps_data.js?v=1"></script>
+<script>
+  // Cache-busting loader: python -m http.server sends no cache-control
+  // headers, so browsers can silently keep serving a stale cached menu.js
+  // even after the file changes on disk. Loading it with a timestamp query
+  // param forces a fresh fetch every page load instead of requiring a hard
+  // refresh (Ctrl+Shift+R) after every edit.
+  document.write('<scr' + 'ipt src="static/menu.js?t=' + Date.now() + '"></scr' + 'ipt>');
+</script>
+<script>
+  initMenu();
+</script>
+</body>
+</html>

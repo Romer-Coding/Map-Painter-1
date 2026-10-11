@@ -1,0 +1,333 @@
+{
+  "_readme": [
+    "World of July 28th, 1914 — consumed by game.js's maybeApplyEraOverrides().",
+    "entities: new polity codes (or renames of existing codes). name -> countryLookup, color -> map fill, flag -> countryFlagOverrides (relative key under assets/flags/, e.g. 'AUH/1914.png' — see assets/flags/ATTRIBUTION.md for sourcing).",
+    "countryReassignments: keyed by CURRENT EFFECTIVE owner code (so SOML/disputed-territory baseline overrides are honored); every shape owned by the key is reassigned to the value.",
+    "regionReassignments: whole-ADM1-region carve-outs applied AFTER the country pass; names matched case/diacritic-insensitively against world_regions.json; unknown names warn+skip harmlessly (variants included where geoBoundaries spelling is uncertain).",
+    "Known first-pass approximations, deliberately country-level: North Schleswig stays DNK (modern Danish ADM1 regions don't isolate it); PNG entirely GBR (NE quarter was German New Guinea); YEM entirely OTT (Aden was British); CHN keeps modern extent; Pacific micro-territories only where a clean single owner exists. Hejaz (Saudi Arabia's Makkah + Al Madinah regions) IS carved to OTT below, leaving Nejd (the rest of SAU) independent.",
+    "Alsace-Lorraine and South Tyrol/Trieste are carved precisely, against world_regions.json's own real ADM2/ADM3-level entries for these countries (France's actual departments Bas-Rhin/Haut-Rhin/Moselle; Italy's actual Trentino/South Tyrol/Trieste provinces, split out from the old Trentino-Alto Adige/Friuli Venezia Giulia region-level blobs — see Scripts/mp1_fetch_adm2_subregions.py).",
+    "Eupen-Malmedy (the Kreis Eupen + Kreis Malmedy territory Germany didn't cede to Belgium until the 1919 Treaty of Versailles/1920 transfer) is carved to DEU below, against a real 10-commune sub-region split out of Liege province — see Scripts/mp1_fetch_belgium_subregions.py. Poland does not appear as a country anywhere in this preset: POL is reassigned wholesale to RUS (the Russian partition/'Congress Poland'), with the German partition (Greater Poland/Posen, West/Pomeranian, Kuyavian-Pomeranian, Warmian-Masurian/East Prussia's western fringe, Lower Silesian, Opole, Silesian) carved to DEU and the Austrian partition (Lesser Poland, Subcarpathian — Galicia) carved to AUH below, in regionReassignments.POL.",
+    "Name-only entity overrides added for four countries that otherwise show their modern country_lookup.json name, which is anachronistic at this date: CHN -> 'Republic of China' (the Qing Dynasty fell Feb 1912; territory unchanged, still the full modern CHN extent per the approximation noted above); IRN -> 'Persia' (renamed Iran in 1935); SAU -> 'Emirate of Nejd' (matches the existing Hejaz-carved-to-OTT design above; the unified Kingdom of Saudi Arabia wasn't proclaimed until 1932); THA -> 'Siam' (renamed Thailand in June 1939).",
+    "PRK (North Korea) now reassigns to JPN alongside the existing KOR entry — Japan's 1910 annexation covered the whole peninsula, both modern successor codes; PRK was previously missing this and showed as an anachronistic independent 'North Korea' (a state that didn't exist until 1948).",
+    "New TIB (Tibet) entity, carved out of CHN via regionReassignments against world_regions.json's real 'Tibet Autonomous Region' entry (id 459). Unlike era_1911.json (where Tibet is left as Qing/CHN — the 13th Dalai Lama's government hadn't yet expelled Qing troops and declared independence), by July 1914 Tibet had been de facto self-governing since 1913 and was mid-negotiation on the Simla Convention with Britain and China (China never ratified it, but did not exercise real control over Tibet again until 1950). Carried forward unchanged into era_1936.json/era_1939.json, where the same de facto status held throughout.",
+    "2026-08-24 correction: world_regions.json's USA region id 3363 was named \"Marshall Islands\" but its 12 shapeIDs are actually ordinary US ADM2 counties all named \"Marshall\" (Marshall County exists in a dozen states) -- a name-matching bug from whatever built that region grouping, not the real Pacific nation. Reassigning it to DEU/JPN here scattered small DEU/JPN-colored patches across the Midwest, all still mislabeled \"Marshall Islands\" on hover. The id 3363 entry has been removed from world_regions.json entirely (root fix); this preset's own \"3363\" regionReassignments.USA entry is removed to match, and clearShapeIDs backfills the correction onto any save that already applied the old regionDataVersion 1. The Northern Mariana Islands entry (id 3097, Rota + Tinian -- real islands, real 1914 German possession) was unaffected and is untouched. The real Marshall Islands aren't represented anywhere in this ADM2 dataset at all (no Pacific-atoll geometry exists for them here) -- don't reintroduce a \"3363\" reference expecting it to mean them."
+  ],
+  "regionDataVersion": 2,
+  "unassignedKeepModernOwner": true,
+  "entities": {
+    "AUH": {
+      "name": "Austria-Hungary",
+      "color": "#c9a85f",
+      "flag": "assets/flags/AUH/1914.png"
+    },
+    "OTT": {
+      "name": "Ottoman Empire",
+      "color": "#8f4a6b",
+      "flag": "assets/flags/OTT/1914.png"
+    },
+    "RUS": {
+      "name": "Russian Empire",
+      "flag": "assets/flags/RUS/1914.png"
+    },
+    "DEU": {
+      "name": "German Empire",
+      "color": "#3d4a35",
+      "flag": "assets/flags/DEU/1914.png"
+    },
+    "GBR": {
+      "name": "British Empire",
+      "color": "#c9973f"
+    },
+    "RAJ": {
+      "name": "British Raj",
+      "color": "#a8657a",
+      "flag": "assets/flags/RAJ/1914.png"
+    },
+    "FRA": {
+      "name": "French Republic",
+      "color": "#9c8a4e"
+    },
+    "CHN": {
+      "name": "Republic of China",
+      "flag": "assets/flags/CHN/1912.png"
+    },
+    "IRN": {
+      "name": "Persia",
+      "flag": "assets/flags/IRN/1907.png"
+    },
+    "SAU": {
+      "name": "Emirate of Nejd",
+      "flag": "assets/flags/SAU/1902.png"
+    },
+    "THA": {
+      "name": "Siam",
+      "flag": "assets/flags/THA/1855.png"
+    },
+    "TIB": {
+      "name": "Tibet",
+      "color": "#6b3a4a",
+      "flag": "assets/flags/TIB/1912.png"
+    },
+    "ITA": {
+      "name": "Kingdom of Italy",
+      "flag": "assets/flags/ITA/1861.png"
+    },
+    "ESP": {
+      "name": "Kingdom of Spain",
+      "flag": "assets/flags/ESP/1875.png"
+    },
+    "ROU": {
+      "name": "Kingdom of Romania",
+      "flag": "assets/flags/ROU/1881.png"
+    },
+    "SRB": {
+      "name": "Kingdom of Serbia",
+      "flag": "assets/flags/SRB/1882.png"
+    }
+  },
+  "countryReassignments": {
+    "AUT": "AUH",
+    "HUN": "AUH",
+    "CZE": "AUH",
+    "SVK": "AUH",
+    "SVN": "AUH",
+    "HRV": "AUH",
+    "BIH": "AUH",
+    "TUR": "OTT",
+    "SYR": "OTT",
+    "LBN": "OTT",
+    "ISR": "OTT",
+    "PSE": "OTT",
+    "JOR": "OTT",
+    "IRQ": "OTT",
+    "YEM": "OTT",
+    "FIN": "RUS",
+    "EST": "RUS",
+    "LVA": "RUS",
+    "LTU": "RUS",
+    "BLR": "RUS",
+    "UKR": "RUS",
+    "MDA": "RUS",
+    "GEO": "RUS",
+    "ARM": "RUS",
+    "AZE": "RUS",
+    "KAZ": "RUS",
+    "KGZ": "RUS",
+    "TJK": "RUS",
+    "TKM": "RUS",
+    "UZB": "RUS",
+    "POL": "RUS",
+    "IND": "RAJ",
+    "PAK": "RAJ",
+    "BGD": "RAJ",
+    "LKA": "RAJ",
+    "MMR": "RAJ",
+    "MDV": "RAJ",
+    "IRL": "GBR",
+    "CYP": "GBR",
+    "MLT": "GBR",
+    "MYS": "GBR",
+    "SGP": "GBR",
+    "BRN": "GBR",
+    "EGY": "GBR",
+    "SDN": "GBR",
+    "SSD": "GBR",
+    "UGA": "GBR",
+    "KEN": "GBR",
+    "ZMB": "GBR",
+    "ZWE": "GBR",
+    "MWI": "GBR",
+    "BWA": "GBR",
+    "LSO": "GBR",
+    "SWZ": "GBR",
+    "NGA": "GBR",
+    "GHA": "GBR",
+    "SLE": "GBR",
+    "GMB": "GBR",
+    "SOML": "GBR",
+    "MUS": "GBR",
+    "SYC": "GBR",
+    "KWT": "GBR",
+    "QAT": "GBR",
+    "BHR": "GBR",
+    "ARE": "GBR",
+    "PNG": "GBR",
+    "FJI": "GBR",
+    "SLB": "GBR",
+    "TON": "GBR",
+    "KIR": "GBR",
+    "TUV": "GBR",
+    "VUT": "GBR",
+    "JAM": "GBR",
+    "TTO": "GBR",
+    "GUY": "GBR",
+    "BLZ": "GBR",
+    "BHS": "GBR",
+    "BRB": "GBR",
+    "GRD": "GBR",
+    "VCT": "GBR",
+    "LCA": "GBR",
+    "DMA": "GBR",
+    "KNA": "GBR",
+    "ATG": "GBR",
+    "DZA": "FRA",
+    "TUN": "FRA",
+    "MAR": "FRA",
+    "MRT": "FRA",
+    "SEN": "FRA",
+    "MLI": "FRA",
+    "GIN": "FRA",
+    "CIV": "FRA",
+    "BFA": "FRA",
+    "NER": "FRA",
+    "TCD": "FRA",
+    "CAF": "FRA",
+    "COG": "FRA",
+    "GAB": "FRA",
+    "BEN": "FRA",
+    "MDG": "FRA",
+    "DJI": "FRA",
+    "COM": "FRA",
+    "VNM": "FRA",
+    "LAO": "FRA",
+    "KHM": "FRA",
+    "TZA": "DEU",
+    "RWA": "DEU",
+    "BDI": "DEU",
+    "NAM": "DEU",
+    "CMR": "DEU",
+    "TGO": "DEU",
+    "WSM": "DEU",
+    "MHL": "DEU",
+    "FSM": "DEU",
+    "PLW": "DEU",
+    "NRU": "DEU",
+    "AGO": "PRT",
+    "MOZ": "PRT",
+    "GNB": "PRT",
+    "CPV": "PRT",
+    "STP": "PRT",
+    "TLS": "PRT",
+    "COD": "BEL",
+    "LBY": "ITA",
+    "ERI": "ITA",
+    "SOM": "ITA",
+    "ESH": "ESP",
+    "GNQ": "ESP",
+    "IDN": "NLD",
+    "PHL": "USA",
+    "PRI": "USA",
+    "ISL": "DNK",
+    "GRL": "DNK",
+    "KOR": "JPN",
+    "PRK": "JPN",
+    "TWN": "JPN",
+    "MKD": "SRB",
+    "XKX": "SRB"
+  },
+  "regionReassignments": {
+    "MAR": {
+      "3327": "ESP",
+      "3328": "ESP",
+      "3329": "ESP"
+    },
+    "SRB": {
+      "2648": "AUH",
+      "2661": "AUH",
+      "2659": "AUH",
+      "2657": "AUH",
+      "2649": "AUH",
+      "2642": "AUH",
+      "2656": "AUH"
+    },
+    "MNE": {
+      "2006": "AUH",
+      "2008": "AUH",
+      "2017": "AUH",
+      "2002": "AUH"
+    },
+    "BGR": {
+      "217": "ROU",
+      "231": "ROU"
+    },
+    "USA": {
+      "3097": "DEU"
+    },
+    "CHN": {
+      "459": "TIB"
+    },
+    "POL": {
+      "2332": "DEU",
+      "2337": "DEU",
+      "2345": "DEU",
+      "2341": "DEU",
+      "2333": "DEU",
+      "2344": "DEU",
+      "2335": "DEU",
+      "2339": "DEU",
+      "2342": "DEU",
+      "2334": "AUH",
+      "2343": "AUH"
+    },
+    "UKR": {
+      "3058": "AUH",
+      "3050": "AUH",
+      "3065": "AUH",
+      "3068": "AUH",
+      "3047": "AUH"
+    },
+    "ROU": {
+      "2405": "AUH",
+      "2406": "AUH",
+      "2409": "AUH",
+      "2410": "AUH",
+      "2413": "AUH",
+      "2417": "AUH",
+      "2418": "AUH",
+      "2420": "AUH",
+      "2426": "AUH",
+      "2427": "AUH",
+      "2431": "AUH",
+      "2433": "AUH",
+      "2437": "AUH",
+      "2438": "AUH",
+      "2439": "AUH",
+      "2442": "AUH"
+    },
+    "SAU": {
+      "2542": "OTT",
+      "2537": "OTT"
+    },
+    "RUS": {
+      "2467": "DEU"
+    },
+    "FRA": {
+      "861": "DEU",
+      "867": "DEU",
+      "869": "DEU"
+    },
+    "ITA": {
+      "1426": "AUH",
+      "1424": "AUH",
+      "3350": "AUH",
+      "1427": "AUH"
+    },
+    "BEL": {
+      "172": "DEU"
+    }
+  },
+  "clearShapeIDs": [
+    "52423323B84214728931657",
+    "52423323B69040166298082",
+    "52423323B67799781771195",
+    "52423323B10683524910186",
+    "52423323B91350179619182",
+    "52423323B97472701360775",
+    "52423323B57387321638409",
+    "52423323B27274564243659",
+    "52423323B90330569397627",
+    "52423323B50167951251333",
+    "52423323B88025454001467",
+    "52423323B44218034529984"
+  ]
+}

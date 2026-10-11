@@ -1,0 +1,311 @@
+{
+  "_readme": [
+    "World of March 7th, 1936 (Rhineland remilitarization) — consumed by game.js's maybeApplyEraOverrides(). Same schema as era_1914.json.",
+    "Differences from era_1939.json, matching this earlier date: Austria and Czechoslovakia are still independent (no Anschluss/Munich yet); Albania is still independent (Italian annexation is April 1939); Ethiopia is still ETH — Italian forces are closing on Addis Ababa but the conquest is unfinished, and the preset's own Simulation Rules make its fall a live first-rounds event; Memel/Klaipeda is still Lithuanian (seized March 1939); the Saar is already German (Jan 1935 plebiscite, part of modern DEU anyway).",
+    "Everything else (colonial empires, mandates, Soviet Union, Kingdom of Yugoslavia) matches 1939.",
+    "East Prussia was continuously German territory from 1871 through 1945 — never part of interwar Poland, unlike the 'Polish Corridor' (Pomorskie/Pomorze) which legitimately WAS Polish 1920-1939 under the Treaty of Versailles and stays POL here. Carved to DEU: Poland's modern Warmian-Masurian region (the bulk of former East Prussia) and Russia's modern Kaliningrad Oblast (the portion east of the current border, part of the same historical province). Danzig itself has no distinct shape in the source data and stays folded into its surrounding region, per the same limitation era_1939.json documents.",
+    "China: the Qing Dynasty's 1911 collapse and the ensuing warlord era are represented as region-level carves against China's real, verified ADM1 provinces (world_regions.json) rather than left as Simulation Rules text only, at this later date. Manchukuo (Heilongjiang, Jilin, Liaoning) reflects the actual 1932 Japanese puppet state. The five warlord cliques use their real historical provincial bases: Shanxi (Yan Xishan), Guangxi (the Guangxi Clique), Yunnan (Long Yun), Xinjiang (Sheng Shicai), and the 'Xibei San Ma' Ma-family cliques across Ningxia/Gansu/Qinghai. The rest of China (the bulk of the country) remains unified CHN, representing the Nationalist government.",
+    "Interwar Poland's eastern territories (the \"Kresy\"), still Polish on this date, are carved out of Belarus/Ukraine/Lithuania's modern-day bulk-to-SOV default: Ukraine's Lviv, Ternopil, Ivano-Frankivsk, Volyn, and Rivne oblasts, and Belarus's Brest and Grodno voblasts, to POL; Vilnius County (the Wilno region, held by Poland since 1922) to POL as well, out of Lithuania. Ukraine's Chernivtsi Oblast (Northern Bukovina) was Romanian, not Soviet, until June 1940 — carved to ROU instead.",
+    "Name-only entity overrides for four countries otherwise showing their modern country_lookup.json name: CHN -> 'Republic of China' (PRC didn't exist until 1949); CZE -> 'Czechoslovakia' (not yet split — see the SVK merge below; 'Czechia' is a 2016-era informal rebrand); TUR -> 'Turkey' ('Türkiye' is a 2022 rebrand request); THA -> 'Siam' (renamed Thailand in June 1939, after this preset's date).",
+    "SVK now reassigns to CZE: Slovakia was not a separate state until the German-sponsored First Slovak Republic was proclaimed March 14 1939 — on this preset's March 1936 date it was still just the eastern half of a single Czechoslovakia, and showing it as its own already-independent 'Slovakia' tag was wrong. Left untouched in era_1939.json, where the (by then real) Slovak Republic correctly stays its own entity and CZE itself no longer appears at all (reassigned wholesale to DEU, with the Protectorate carved out to BOH).",
+    "PRK (North Korea) now reassigns to JPN alongside the existing KOR entry, matching Japan's actual 1910-1945 rule over the whole peninsula — previously missing, so it showed as an anachronistic already-independent 'North Korea' (not a real state until 1948).",
+    "New TIB (Tibet) entity, added to the existing CHN regionReassignments block (id 459, world_regions.json's real 'Tibet Autonomous Region' entry) alongside the Manchukuo/warlord carves already documented above. Tibet had been de facto self-governing under the Dalai Lama's government since 1913 and remained so throughout this whole preset's era, up to the 1950 Chinese invasion — well outside any of these four presets' dates.",
+    "2026-08-24 correction: world_regions.json's USA region id 3363 was named \"Marshall Islands\" but its 12 shapeIDs are actually ordinary US ADM2 counties all named \"Marshall\" (Marshall County exists in a dozen states) -- a name-matching bug from whatever built that region grouping, not the real Pacific nation. Reassigning it to DEU/JPN here scattered small DEU/JPN-colored patches across the Midwest, all still mislabeled \"Marshall Islands\" on hover. The id 3363 entry has been removed from world_regions.json entirely (root fix); this preset's own \"3363\" regionReassignments.USA entry is removed to match, and clearShapeIDs backfills the correction onto any save that already applied the old regionDataVersion 1. The Northern Mariana Islands entry (id 3097, Rota + Tinian -- real islands, real 1914 German possession) was unaffected and is untouched. The real Marshall Islands aren't represented anywhere in this ADM2 dataset at all (no Pacific-atoll geometry exists for them here) -- don't reintroduce a \"3363\" reference expecting it to mean them."
+  ],
+  "regionDataVersion": 2,
+  "unassignedKeepModernOwner": true,
+  "entities": {
+    "SOV": {
+      "name": "Soviet Union",
+      "color": "#a13a2e",
+      "flag": "assets/flags/SOV/1939.png"
+    },
+    "YUG": {
+      "name": "Kingdom of Yugoslavia",
+      "color": "#4e7ea8",
+      "flag": "assets/flags/YUG/1939.png"
+    },
+    "DEU": {
+      "name": "German Reich",
+      "color": "#3d4a35",
+      "flag": "assets/flags/DEU/1939.png"
+    },
+    "GBR": {
+      "name": "British Empire",
+      "color": "#c9973f"
+    },
+    "FRA": {
+      "name": "French Republic",
+      "color": "#9c8a4e"
+    },
+    "MAN": {
+      "name": "Manchukuo",
+      "color": "#c9a85f",
+      "flag": "assets/flags/MAN/1932.png"
+    },
+    "SXW": {
+      "name": "Shanxi Clique",
+      "color": "#4a7a6b"
+    },
+    "GXW": {
+      "name": "Guangxi Clique",
+      "color": "#7a9c5f"
+    },
+    "YNW": {
+      "name": "Yunnan Clique",
+      "color": "#8f4a6b",
+      "flag": "assets/flags/YNW/1927.png"
+    },
+    "XJW": {
+      "name": "Xinjiang Clique",
+      "color": "#6b4e8f",
+      "flag": "assets/flags/XJW/1934.png"
+    },
+    "NGM": {
+      "name": "Xibei San Ma",
+      "color": "#a8657a",
+      "flag": "assets/flags/NGM/1930.png"
+    },
+    "CHN": {
+      "name": "Republic of China",
+      "flag": "assets/flags/CHN/1928.png"
+    },
+    "CZE": {
+      "name": "Czechoslovakia"
+    },
+    "DZG": {
+      "name": "Free City of Danzig",
+      "color": "#b06b3a",
+      "flag": "assets/flags/DZG/1920.png"
+    },
+    "TUR": {
+      "name": "Turkey"
+    },
+    "THA": {
+      "name": "Siam"
+    },
+    "TIB": {
+      "name": "Tibet",
+      "color": "#6b3a4a",
+      "flag": "assets/flags/TIB/1912.png"
+    },
+    "ITA": {
+      "name": "Kingdom of Italy",
+      "flag": "assets/flags/ITA/1861.png"
+    },
+    "ESP": {
+      "name": "Spanish Republic",
+      "flag": "assets/flags/ESP/1931.png"
+    },
+    "ROU": {
+      "name": "Kingdom of Romania",
+      "flag": "assets/flags/ROU/1881.png"
+    },
+    "HUN": {
+      "name": "Kingdom of Hungary",
+      "flag": "assets/flags/HUN/1920.png"
+    },
+    "ZAF": {
+      "name": "Union of South Africa",
+      "flag": "assets/flags/ZAF/1928.png"
+    }
+  },
+  "countryReassignments": {
+    "PLW": "JPN",
+    "FSM": "JPN",
+    "WSM": "NZL",
+    "NRU": "AUS",
+    "RUS": "SOV",
+    "BLR": "SOV",
+    "UKR": "SOV",
+    "GEO": "SOV",
+    "ARM": "SOV",
+    "AZE": "SOV",
+    "KAZ": "SOV",
+    "KGZ": "SOV",
+    "TJK": "SOV",
+    "TKM": "SOV",
+    "UZB": "SOV",
+    "SRB": "YUG",
+    "HRV": "YUG",
+    "SVN": "YUG",
+    "BIH": "YUG",
+    "MKD": "YUG",
+    "MNE": "YUG",
+    "XKX": "YUG",
+    "ERI": "ITA",
+    "SOM": "ITA",
+    "LBY": "ITA",
+    "KOR": "JPN",
+    "PRK": "JPN",
+    "TWN": "JPN",
+    "SVK": "CZE",
+    "MDA": "ROU",
+    "CYP": "GBR",
+    "MLT": "GBR",
+    "IND": "GBR",
+    "PAK": "GBR",
+    "BGD": "GBR",
+    "LKA": "GBR",
+    "MMR": "GBR",
+    "MDV": "GBR",
+    "MYS": "GBR",
+    "SGP": "GBR",
+    "BRN": "GBR",
+    "SDN": "GBR",
+    "SSD": "GBR",
+    "UGA": "GBR",
+    "KEN": "GBR",
+    "TZA": "GBR",
+    "ZMB": "GBR",
+    "ZWE": "GBR",
+    "MWI": "GBR",
+    "BWA": "GBR",
+    "LSO": "GBR",
+    "SWZ": "GBR",
+    "NGA": "GBR",
+    "GHA": "GBR",
+    "SLE": "GBR",
+    "GMB": "GBR",
+    "SOML": "GBR",
+    "MUS": "GBR",
+    "SYC": "GBR",
+    "ISR": "GBR",
+    "PSE": "GBR",
+    "JOR": "GBR",
+    "KWT": "GBR",
+    "QAT": "GBR",
+    "BHR": "GBR",
+    "ARE": "GBR",
+    "FJI": "GBR",
+    "SLB": "GBR",
+    "TON": "GBR",
+    "KIR": "GBR",
+    "TUV": "GBR",
+    "VUT": "GBR",
+    "JAM": "GBR",
+    "TTO": "GBR",
+    "GUY": "GBR",
+    "BLZ": "GBR",
+    "BHS": "GBR",
+    "BRB": "GBR",
+    "GRD": "GBR",
+    "VCT": "GBR",
+    "LCA": "GBR",
+    "DMA": "GBR",
+    "KNA": "GBR",
+    "ATG": "GBR",
+    "PNG": "AUS",
+    "NAM": "ZAF",
+    "SYR": "FRA",
+    "LBN": "FRA",
+    "DZA": "FRA",
+    "TUN": "FRA",
+    "MAR": "FRA",
+    "MRT": "FRA",
+    "SEN": "FRA",
+    "MLI": "FRA",
+    "GIN": "FRA",
+    "CIV": "FRA",
+    "BFA": "FRA",
+    "NER": "FRA",
+    "TCD": "FRA",
+    "CAF": "FRA",
+    "COG": "FRA",
+    "GAB": "FRA",
+    "BEN": "FRA",
+    "TGO": "FRA",
+    "CMR": "FRA",
+    "MDG": "FRA",
+    "DJI": "FRA",
+    "COM": "FRA",
+    "VNM": "FRA",
+    "LAO": "FRA",
+    "KHM": "FRA",
+    "AGO": "PRT",
+    "MOZ": "PRT",
+    "GNB": "PRT",
+    "CPV": "PRT",
+    "STP": "PRT",
+    "TLS": "PRT",
+    "COD": "BEL",
+    "RWA": "BEL",
+    "BDI": "BEL",
+    "ESH": "ESP",
+    "GNQ": "ESP",
+    "IDN": "NLD",
+    "PHL": "USA",
+    "PRI": "USA",
+    "GRL": "DNK"
+  },
+  "regionReassignments": {
+    "MAR": {
+      "3327": "ESP",
+      "3328": "ESP",
+      "3329": "ESP"
+    },
+    "BGR": {
+      "217": "ROU",
+      "231": "ROU"
+    },
+    "USA": {
+      "3097": "JPN"
+    },
+    "SVN": {
+      "3364": "ITA"
+    },
+    "HRV": {
+      "3365": "ITA"
+    },
+    "POL": {
+      "2344": "DEU",
+      "3330": "DZG"
+    },
+    "RUS": {
+      "2467": "DEU"
+    },
+    "CHN": {
+      "441": "MAN",
+      "449": "MAN",
+      "450": "MAN",
+      "456": "SXW",
+      "436": "GXW",
+      "461": "YNW",
+      "460": "XJW",
+      "451": "NGM",
+      "435": "NGM",
+      "452": "NGM",
+      "459": "TIB"
+    },
+    "UKR": {
+      "3058": "POL",
+      "3065": "POL",
+      "3050": "POL",
+      "3067": "POL",
+      "3062": "POL",
+      "3047": "ROU",
+      "3068": "CZE"
+    },
+    "BLR": {
+      "267": "POL",
+      "269": "POL"
+    },
+    "LTU": {
+      "1743": "POL"
+    }
+  },
+  "clearShapeIDs": [
+    "52423323B84214728931657",
+    "52423323B69040166298082",
+    "52423323B67799781771195",
+    "52423323B10683524910186",
+    "52423323B91350179619182",
+    "52423323B97472701360775",
+    "52423323B57387321638409",
+    "52423323B27274564243659",
+    "52423323B90330569397627",
+    "52423323B50167951251333",
+    "52423323B88025454001467",
+    "52423323B44218034529984"
+  ]
+}

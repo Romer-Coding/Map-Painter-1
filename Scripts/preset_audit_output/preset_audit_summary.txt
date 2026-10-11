@@ -1,0 +1,706 @@
+====================================================================================================
+MAP PAINTER 1 — HISTORICAL PRESET DATA AUDIT
+Read-only dump of what game.js's maybeApplyEraOverrides() actually computes for each preset.
+====================================================================================================
+
+####################################################################################################
+ERA 1911  (start date 1911-01-01)
+####################################################################################################
+
+-- Countries active this era, by total province count --
+  GBR    British Empire                             5707 provinces [NEW ERA ENTITY]
+           composed from: JAM:816, NGA:774, CYP:596, LCA:510, EGY:322, KEN:288, GHA:260, GBR:212, SDN:189, IRL:165, MYS:159, UGA:149, KWT:129, ZMB:116, PNG:87, LSO:78, SSD:78, ZWE:78, QAT:77, MLT:66, SWZ:53, VUT:50, SGP:49, GMB:48, SLB:46, BRN:37, BLZ:29, MWI:27, GUY:26, BWA:25, BHS:20, SOM:18, SLE:14, KNA:14, FJI:13, TTO:13, BRB:10, DMA:10, MUS:10, TON:8, ATG:7, ARE:7, GRD:6, SYC:6, VCT:5, BHR:3, TUV:2, KIR:1, 117:1
+  BRA    Brazil                                     5561 provinces
+           composed from: BRA:5560, 120:1
+  RUS    Russian Empire                             4417 provinces [NEW ERA ENTITY]
+           composed from: RUS:2188, LVA:543, UKR:418, EST:194, KAZ:174, UZB:171, BLR:118, POL:113, AZE:70, FIN:68, GEO:68, LTU:59, TKM:59, TJK:58, KGZ:40, ARM:39, MDA:37
+  USA    United States of America                   3273 provinces
+           composed from: USA:3187, PHL:86
+  CHN    Qing Empire                                2695 provinces [NEW ERA ENTITY]
+           composed from: CHN:2360, MNG:334, 112:1
+  AUH    Austria-Hungary                            2558 provinces [NEW ERA ENTITY]
+           composed from: ROU:1196, HRV:523, SVN:208, HUN:198, AUT:89, SVK:79, CZE:77, UKR:76, POL:46, SRB:45, BIH:12, MNE:4, ITA:4, 115:1
+  JPN    Japan                                      2430 provinces
+           composed from: JPN:1683, TWN:351, KOR:222, PRK:174
+  MEX    Mexico                                     2428 provinces
+           composed from: MEX:2428
+  FRA    French Republic                            2233 provinces [NEW ERA ENTITY]
+           composed from: VNM:696, TUN:262, KHM:196, LAO:148, MDG:117, FRA:93, BEN:77, CAF:72, TCD:70, NER:67, MRT:57, MLI:50, GAB:49, DZA:48, COG:46, BFA:45, SEN:45, GIN:34, CIV:33, COM:17, DJI:11
+  ROU    Romania                                    2012 provinces
+           composed from: ROU:2012
+  OTT    Ottoman Empire                             1768 provinces [NEW ERA ENTITY]
+           composed from: TUR:969, YEM:332, IRQ:101, MKD:82, SYR:61, JOR:52, ALB:36, XKX:35, SAU:27, LBN:26, LBY:22, ISR:15, MNE:9, PSE:1
+  COL    Colombia                                   1119 provinces
+           composed from: COL:1119
+  RAJ    British Raj                                1025 provinces [NEW ERA ENTITY]
+           composed from: IND:734, PAK:126, MMR:74, BGD:64, LKA:25, 119:1, 121:1
+  DEU    German Empire                               947 provinces [NEW ERA ENTITY]
+           composed from: POL:209, TZA:169, BDI:119, NAM:100, PLW:67, CMR:58, WSM:43, DEU:38, TGO:37, RWA:30, RUS:21, FSM:15, USA:14, NRU:14, BEL:10, FRA:3
+  THA    Siam                                        926 provinces [NEW ERA ENTITY]
+           composed from: THA:926
+  NLD    Netherlands                                 842 provinces
+           composed from: IDN:502, NLD:340
+  PRT    Portugal                                    760 provinces
+           composed from: PRT:306, AGO:157, MOZ:156, TLS:65, GNB:39, CPV:30, STP:7
+  AUS    Australia                                   537 provinces
+           composed from: AUS:537
+  ARG    Argentina                                   525 provinces
+           composed from: ARG:525
+  IRN    Persia                                      431 provinces [NEW ERA ENTITY]
+           composed from: IRN:431
+  NOR    Norway                                      405 provinces
+           composed from: NOR:405
+  AFG    Afghanistan                                 396 provinces
+           composed from: AFG:396
+  GTM    Guatemala                                   340 provinces
+           composed from: GTM:340
+  VEN    Venezuela                                   334 provinces
+           composed from: VEN:334
+  HND    Honduras                                    293 provinces
+           composed from: HND:293
+  SWE    Sweden                                      285 provinces
+           composed from: SWE:285
+  BGR    Bulgaria                                    264 provinces
+           composed from: BGR:264
+  SLV    El Salvador                                 260 provinces
+           composed from: SLV:260
+  PRY    Paraguay                                    245 provinces
+           composed from: PRY:245
+  ECU    Ecuador                                     222 provinces
+           composed from: ECU:222
+  BTN    Bhutan                                      206 provinces
+           composed from: BTN:205, 116:1
+  PER    Peru                                        196 provinces
+           composed from: PER:196
+  BEL    Belgium                                     183 provinces
+           composed from: COD:172, BEL:11
+  ITA    Kingdom of Italy                            178 provinces [NEW ERA ENTITY]
+           composed from: SOM:100, ERI:58, ITA:20
+  DNK    Denmark                                     170 provinces
+           composed from: DNK:95, ISL:69, GRL:6
+  CUB    Cuba                                        167 provinces
+           composed from: CUB:167
+  CHE    Switzerland                                 166 provinces
+           composed from: CHE:166
+  DOM    Dominican Republic                          155 provinces
+           composed from: DOM:155
+  NIC    Nicaragua                                   151 provinces
+           composed from: NIC:151
+  LBR    Liberia                                     134 provinces
+           composed from: LBR:134
+  SAU    Emirate of Nejd                             120 provinces [NEW ERA ENTITY]
+           composed from: SAU:120
+  BOL    Bolivia                                     110 provinces
+           composed from: BOL:110
+  LUX    Luxembourg                                  105 provinces
+           composed from: LUX:105
+  SRB    Serbia                                      100 provinces
+           composed from: SRB:100
+  NZL    New Zealand                                  86 provinces
+           composed from: NZL:86
+  CRI    Costa Rica                                   83 provinces
+           composed from: CRI:83
+  CAN    Canada                                       76 provinces
+           composed from: CAN:76
+  ESP    Kingdom of Spain                             76 provinces [NEW ERA ENTITY]
+           composed from: ESP:50, GNQ:24, MAR:1, ESH:1
+  NPL    Nepal                                        75 provinces
+           composed from: NPL:75
+  ETH    Ethiopia                                     74 provinces
+           composed from: ETH:74
+  PAN    Panama                                       74 provinces
+           composed from: PAN:74
+  MAR    Sultanate of Morocco                         70 provinces [NEW ERA ENTITY]
+           composed from: MAR:70
+  OMN    Oman                                         61 provinces
+           composed from: OMN:61
+  SUR    Suriname                                     58 provinces
+           composed from: SUR:58
+  CHL    Chile                                        56 provinces
+           composed from: CHL:56
+  ZAF    South Africa                                 52 provinces
+           composed from: ZAF:52
+  HTI    Haiti                                        42 provinces
+           composed from: HTI:42
+  URY    Uruguay                                      19 provinces
+           composed from: URY:19
+  GRC    Greece                                       14 provinces
+           composed from: GRC:14
+  LIE    Liechtenstein                                11 provinces
+           composed from: LIE:11
+  MNE    Montenegro                                   10 provinces
+           composed from: MNE:10
+  MCO    Monaco                                        9 provinces
+           composed from: MCO:9
+  SMR    San Marino                                    9 provinces
+           composed from: SMR:9
+  AND    Andorra                                       7 provinces
+           composed from: AND:7
+  ATA    Antarctica                                    1 provinces
+           composed from: ATA:1
+  111    Abyei                                         1 provinces
+           composed from: 111:1
+  113    CH-IN Disputed Area                           1 provinces
+           composed from: 113:1
+  114    Demchok                                       1 provinces
+           composed from: 114:1
+  118    Gaza Strip                                    1 provinces
+           composed from: 118:1
+  124    No Man's Land                                 1 provinces
+           composed from: 124:1
+
+-- Origin countries whose ENTIRE modern territory keeps its own code this era
+   (never a countryReassignments key, never touched by any regionReassignments carve) --
+   AFG, AND, ARG, ATA, AUS, BGR, BOL, BRA, BTN, CAN, CHE, CHL
+   CHN, COL, CRI, CUB, DEU, DNK, DOM, ECU, ESP, ETH, GBR, GRC
+   GTM, HND, HTI, IRN, JPN, LBR, LIE, LUX, MCO, MEX, NIC, NLD
+   NOR, NPL, NZL, OMN, PAN, PER, PRT, PRY, SLV, SMR, SUR, SWE
+   THA, URY, VEN, ZAF
+
+-- Origin countries that keep their modern code EXCEPT for specific listed ADM1 carve-outs --
+   BEL, FRA, ITA, MAR, MNE, ROU, RUS, SAU, SRB, USA
+   (see the per-era JSON dump for exactly which regions were carved out of each)
+
+####################################################################################################
+ERA 1914  (start date 1914-07-28)
+####################################################################################################
+
+-- Countries active this era, by total province count --
+  GBR    British Empire                             5707 provinces [NEW ERA ENTITY]
+           composed from: JAM:816, NGA:774, CYP:596, LCA:510, EGY:322, KEN:288, GHA:260, GBR:212, SDN:189, IRL:165, MYS:159, UGA:149, KWT:129, ZMB:116, PNG:87, LSO:78, SSD:78, ZWE:78, QAT:77, MLT:66, SWZ:53, VUT:50, SGP:49, GMB:48, SLB:46, BRN:37, BLZ:29, MWI:27, GUY:26, BWA:25, BHS:20, SOM:18, SLE:14, KNA:14, FJI:13, TTO:13, BRB:10, DMA:10, MUS:10, TON:8, ATG:7, ARE:7, GRD:6, SYC:6, VCT:5, BHR:3, TUV:2, KIR:1, 117:1
+  BRA    Brazil                                     5561 provinces
+           composed from: BRA:5560, 120:1
+  RUS    Russian Empire                             4417 provinces [NEW ERA ENTITY]
+           composed from: RUS:2188, LVA:543, UKR:418, EST:194, KAZ:174, UZB:171, BLR:118, POL:113, AZE:70, FIN:68, GEO:68, LTU:59, TKM:59, TJK:58, KGZ:40, ARM:39, MDA:37
+  USA    United States of America                   3273 provinces
+           composed from: USA:3187, PHL:86
+  AUH    Austria-Hungary                            2558 provinces [NEW ERA ENTITY]
+           composed from: ROU:1196, HRV:523, SVN:208, HUN:198, AUT:89, SVK:79, CZE:77, UKR:76, POL:46, SRB:45, BIH:12, MNE:4, ITA:4, 115:1
+  JPN    Japan                                      2430 provinces
+           composed from: JPN:1683, TWN:351, KOR:222, PRK:174
+  MEX    Mexico                                     2428 provinces
+           composed from: MEX:2428
+  FRA    French Republic                            2294 provinces [NEW ERA ENTITY]
+           composed from: VNM:696, TUN:262, KHM:196, LAO:148, MDG:117, FRA:93, BEN:77, CAF:72, TCD:70, NER:67, MAR:61, MRT:57, MLI:50, GAB:49, DZA:48, COG:46, BFA:45, SEN:45, GIN:34, CIV:33, COM:17, DJI:11
+  CHN    Republic of China                          2283 provinces [NEW ERA ENTITY]
+           composed from: CHN:2282, 112:1
+  ROU    Kingdom of Romania                         2027 provinces [NEW ERA ENTITY]
+           composed from: ROU:2012, BGR:15
+  OTT    Ottoman Empire                             1584 provinces [NEW ERA ENTITY]
+           composed from: TUR:969, YEM:332, IRQ:101, SYR:61, JOR:52, SAU:27, LBN:26, ISR:15, PSE:1
+  COL    Colombia                                   1119 provinces
+           composed from: COL:1119
+  RAJ    British Raj                                1025 provinces [NEW ERA ENTITY]
+           composed from: IND:734, PAK:126, MMR:74, BGD:64, LKA:25, 119:1, 121:1
+  DEU    German Empire                               947 provinces [NEW ERA ENTITY]
+           composed from: POL:209, TZA:169, BDI:119, NAM:100, PLW:67, CMR:58, WSM:43, DEU:38, TGO:37, RWA:30, RUS:21, FSM:15, USA:14, NRU:14, BEL:10, FRA:3
+  THA    Siam                                        926 provinces [NEW ERA ENTITY]
+           composed from: THA:926
+  NLD    Netherlands                                 842 provinces
+           composed from: IDN:502, NLD:340
+  PRT    Portugal                                    760 provinces
+           composed from: PRT:306, AGO:157, MOZ:156, TLS:65, GNB:39, CPV:30, STP:7
+  AUS    Australia                                   537 provinces
+           composed from: AUS:537
+  ARG    Argentina                                   525 provinces
+           composed from: ARG:525
+  IRN    Persia                                      431 provinces [NEW ERA ENTITY]
+           composed from: IRN:431
+  NOR    Norway                                      405 provinces
+           composed from: NOR:405
+  AFG    Afghanistan                                 396 provinces
+           composed from: AFG:396
+  GTM    Guatemala                                   340 provinces
+           composed from: GTM:340
+  MNG    Mongolia                                    334 provinces
+           composed from: MNG:334
+  VEN    Venezuela                                   334 provinces
+           composed from: VEN:334
+  HND    Honduras                                    293 provinces
+           composed from: HND:293
+  SWE    Sweden                                      285 provinces
+           composed from: SWE:285
+  SLV    El Salvador                                 260 provinces
+           composed from: SLV:260
+  BGR    Bulgaria                                    249 provinces
+           composed from: BGR:249
+  PRY    Paraguay                                    245 provinces
+           composed from: PRY:245
+  ECU    Ecuador                                     222 provinces
+           composed from: ECU:222
+  SRB    Kingdom of Serbia                           217 provinces [NEW ERA ENTITY]
+           composed from: SRB:100, MKD:82, XKX:35
+  BTN    Bhutan                                      206 provinces
+           composed from: BTN:205, 116:1
+  ITA    Kingdom of Italy                            200 provinces [NEW ERA ENTITY]
+           composed from: SOM:100, ERI:58, LBY:22, ITA:20
+  PER    Peru                                        196 provinces
+           composed from: PER:196
+  BEL    Belgium                                     183 provinces
+           composed from: COD:172, BEL:11
+  DNK    Denmark                                     170 provinces
+           composed from: DNK:95, ISL:69, GRL:6
+  CUB    Cuba                                        167 provinces
+           composed from: CUB:167
+  CHE    Switzerland                                 166 provinces
+           composed from: CHE:166
+  DOM    Dominican Republic                          155 provinces
+           composed from: DOM:155
+  NIC    Nicaragua                                   151 provinces
+           composed from: NIC:151
+  LBR    Liberia                                     134 provinces
+           composed from: LBR:134
+  SAU    Emirate of Nejd                             120 provinces [NEW ERA ENTITY]
+           composed from: SAU:120
+  BOL    Bolivia                                     110 provinces
+           composed from: BOL:110
+  LUX    Luxembourg                                  105 provinces
+           composed from: LUX:105
+  NZL    New Zealand                                  86 provinces
+           composed from: NZL:86
+  ESP    Kingdom of Spain                             85 provinces [NEW ERA ENTITY]
+           composed from: ESP:50, GNQ:24, MAR:10, ESH:1
+  CRI    Costa Rica                                   83 provinces
+           composed from: CRI:83
+  TIB    Tibet                                        78 provinces [NEW ERA ENTITY]
+           composed from: CHN:78
+  CAN    Canada                                       76 provinces
+           composed from: CAN:76
+  NPL    Nepal                                        75 provinces
+           composed from: NPL:75
+  ETH    Ethiopia                                     74 provinces
+           composed from: ETH:74
+  PAN    Panama                                       74 provinces
+           composed from: PAN:74
+  OMN    Oman                                         61 provinces
+           composed from: OMN:61
+  SUR    Suriname                                     58 provinces
+           composed from: SUR:58
+  CHL    Chile                                        56 provinces
+           composed from: CHL:56
+  ZAF    South Africa                                 52 provinces
+           composed from: ZAF:52
+  HTI    Haiti                                        42 provinces
+           composed from: HTI:42
+  ALB    Albania                                      36 provinces
+           composed from: ALB:36
+  MNE    Montenegro                                   19 provinces
+           composed from: MNE:19
+  URY    Uruguay                                      19 provinces
+           composed from: URY:19
+  GRC    Greece                                       14 provinces
+           composed from: GRC:14
+  LIE    Liechtenstein                                11 provinces
+           composed from: LIE:11
+  MCO    Monaco                                        9 provinces
+           composed from: MCO:9
+  SMR    San Marino                                    9 provinces
+           composed from: SMR:9
+  AND    Andorra                                       7 provinces
+           composed from: AND:7
+  ATA    Antarctica                                    1 provinces
+           composed from: ATA:1
+  111    Abyei                                         1 provinces
+           composed from: 111:1
+  113    CH-IN Disputed Area                           1 provinces
+           composed from: 113:1
+  114    Demchok                                       1 provinces
+           composed from: 114:1
+  118    Gaza Strip                                    1 provinces
+           composed from: 118:1
+  124    No Man's Land                                 1 provinces
+           composed from: 124:1
+
+-- Origin countries whose ENTIRE modern territory keeps its own code this era
+   (never a countryReassignments key, never touched by any regionReassignments carve) --
+   AFG, ALB, AND, ARG, ATA, AUS, BOL, BRA, BTN, CAN, CHE, CHL
+   COL, CRI, CUB, DEU, DNK, DOM, ECU, ESP, ETH, GBR, GRC, GTM
+   HND, HTI, IRN, JPN, LBR, LIE, LUX, MCO, MEX, MNG, NIC, NLD
+   NOR, NPL, NZL, OMN, PAN, PER, PRT, PRY, SLV, SMR, SUR, SWE
+   THA, URY, VEN, ZAF
+
+-- Origin countries that keep their modern code EXCEPT for specific listed ADM1 carve-outs --
+   BEL, BGR, CHN, FRA, ITA, MNE, ROU, RUS, SAU, SRB, USA
+   (see the per-era JSON dump for exactly which regions were carved out of each)
+
+####################################################################################################
+ERA 1936  (start date 1936-03-07)
+####################################################################################################
+
+-- Countries active this era, by total province count --
+  GBR    British Empire                             6395 provinces [NEW ERA ENTITY]
+           composed from: JAM:816, NGA:774, IND:734, CYP:596, LCA:510, KEN:288, GHA:260, GBR:212, SDN:189, TZA:169, MYS:159, UGA:149, KWT:129, PAK:126, ZMB:116, LSO:78, SSD:78, ZWE:78, QAT:77, MMR:74, MLT:66, BGD:64, SWZ:53, JOR:52, VUT:50, SGP:49, GMB:48, SLB:46, BRN:37, BLZ:29, MWI:27, GUY:26, BWA:25, LKA:25, BHS:20, SOM:18, ISR:15, SLE:14, KNA:14, FJI:13, TTO:13, BRB:10, DMA:10, MUS:10, TON:8, ATG:7, ARE:7, GRD:6, SYC:6, VCT:5, BHR:3, TUV:2, KIR:1, 117:1, 119:1, 121:1, PSE:1
+  BRA    Brazil                                     5561 provinces
+           composed from: BRA:5560, 120:1
+  SOV    Soviet Union                               3338 provinces [NEW ERA ENTITY]
+           composed from: RUS:2188, UKR:386, KAZ:174, UZB:171, BLR:85, AZE:70, GEO:68, TKM:59, TJK:58, KGZ:40, ARM:39
+  USA    United States of America                   3273 provinces
+           composed from: USA:3187, PHL:86
+  ROU    Kingdom of Romania                         3273 provinces [NEW ERA ENTITY]
+           composed from: ROU:3208, MDA:37, BGR:15, UKR:13
+  JPN    Japan                                      2526 provinces
+           composed from: JPN:1683, TWN:351, KOR:222, PRK:174, PLW:67, FSM:15, USA:14
+  FRA    French Republic                            2479 provinces [NEW ERA ENTITY]
+           composed from: VNM:696, TUN:262, KHM:196, LAO:148, MDG:117, FRA:96, BEN:77, CAF:72, TCD:70, NER:67, MAR:61, SYR:61, CMR:58, MRT:57, MLI:50, GAB:49, DZA:48, COG:46, BFA:45, SEN:45, TGO:37, GIN:34, CIV:33, LBN:26, COM:17, DJI:11
+  MEX    Mexico                                     2428 provinces
+           composed from: MEX:2428
+  CHN    Republic of China                          1553 provinces [NEW ERA ENTITY]
+           composed from: CHN:1552, 112:1
+  COL    Colombia                                   1119 provinces
+           composed from: COL:1119
+  YUG    Kingdom of Yugoslavia                      1001 provinces [NEW ERA ENTITY]
+           composed from: HRV:517, SVN:186, SRB:145, MKD:82, XKX:35, MNE:23, BIH:12, 115:1
+  TUR    Turkey                                      969 provinces [NEW ERA ENTITY]
+           composed from: TUR:969
+  THA    Siam                                        926 provinces [NEW ERA ENTITY]
+           composed from: THA:926
+  NLD    Netherlands                                 842 provinces
+           composed from: IDN:502, NLD:340
+  PRT    Portugal                                    760 provinces
+           composed from: PRT:306, AGO:157, MOZ:156, TLS:65, GNB:39, CPV:30, STP:7
+  AUS    Australia                                   638 provinces
+           composed from: AUS:537, PNG:87, NRU:14
+  LVA    Latvia                                      543 provinces
+           composed from: LVA:543
+  ARG    Argentina                                   525 provinces
+           composed from: ARG:525
+  POL    Poland                                      468 provinces
+           composed from: POL:345, UKR:82, BLR:33, LTU:8
+  IRN    Iran                                        431 provinces
+           composed from: IRN:431
+  NOR    Norway                                      405 provinces
+           composed from: NOR:405
+  AFG    Afghanistan                                 396 provinces
+           composed from: AFG:396
+  BEL    Belgium                                     342 provinces
+           composed from: COD:172, BDI:119, RWA:30, BEL:21
+  GTM    Guatemala                                   340 provinces
+           composed from: GTM:340
+  MNG    Mongolia                                    334 provinces
+           composed from: MNG:334
+  VEN    Venezuela                                   334 provinces
+           composed from: VEN:334
+  YEM    Yemen                                       332 provinces
+           composed from: YEM:332
+  EGY    Egypt                                       322 provinces
+           composed from: EGY:322
+  HND    Honduras                                    293 provinces
+           composed from: HND:293
+  SWE    Sweden                                      285 provinces
+           composed from: SWE:285
+  SLV    El Salvador                                 260 provinces
+           composed from: SLV:260
+  BGR    Bulgaria                                    249 provinces
+           composed from: BGR:249
+  PRY    Paraguay                                    245 provinces
+           composed from: PRY:245
+  ITA    Kingdom of Italy                            232 provinces [NEW ERA ENTITY]
+           composed from: SOM:100, ERI:58, ITA:24, LBY:22, SVN:22, HRV:6
+  ECU    Ecuador                                     222 provinces
+           composed from: ECU:222
+  BTN    Bhutan                                      206 provinces
+           composed from: BTN:205, 116:1
+  HUN    Kingdom of Hungary                          198 provinces [NEW ERA ENTITY]
+           composed from: HUN:198
+  PER    Peru                                        196 provinces
+           composed from: PER:196
+  EST    Estonia                                     194 provinces
+           composed from: EST:194
+  MAN    Manchukuo                                   185 provinces [NEW ERA ENTITY]
+           composed from: CHN:185
+  CZE    Czechoslovakia                              169 provinces [NEW ERA ENTITY]
+           composed from: SVK:79, CZE:77, UKR:13
+  CUB    Cuba                                        167 provinces
+           composed from: CUB:167
+  CHE    Switzerland                                 166 provinces
+           composed from: CHE:166
+  IRL    Ireland                                     165 provinces
+           composed from: IRL:165
+  DOM    Dominican Republic                          155 provinces
+           composed from: DOM:155
+  ZAF    Union of South Africa                       152 provinces [NEW ERA ENTITY]
+           composed from: NAM:100, ZAF:52
+  NIC    Nicaragua                                   151 provinces
+           composed from: NIC:151
+  SAU    Saudi Arabia                                147 provinces
+           composed from: SAU:147
+  NGM    Xibei San Ma                                143 provinces [NEW ERA ENTITY]
+           composed from: CHN:143
+  LBR    Liberia                                     134 provinces
+           composed from: LBR:134
+  NZL    New Zealand                                 129 provinces
+           composed from: NZL:86, WSM:43
+  YNW    Yunnan Clique                               121 provinces [NEW ERA ENTITY]
+           composed from: CHN:121
+  BOL    Bolivia                                     110 provinces
+           composed from: BOL:110
+  SXW    Shanxi Clique                               105 provinces [NEW ERA ENTITY]
+           composed from: CHN:105
+  LUX    Luxembourg                                  105 provinces
+           composed from: LUX:105
+  DNK    Denmark                                     101 provinces
+           composed from: DNK:95, GRL:6
+  IRQ    Iraq                                        101 provinces
+           composed from: IRQ:101
+  AUT    Austria                                      89 provinces
+           composed from: AUT:89
+  GXW    Guangxi Clique                               89 provinces [NEW ERA ENTITY]
+           composed from: CHN:89
+  XJW    Xinjiang Clique                              87 provinces [NEW ERA ENTITY]
+           composed from: CHN:87
+  ESP    Spanish Republic                             85 provinces [NEW ERA ENTITY]
+           composed from: ESP:50, GNQ:24, MAR:10, ESH:1
+  CRI    Costa Rica                                   83 provinces
+           composed from: CRI:83
+  DEU    German Reich                                 80 provinces [NEW ERA ENTITY]
+           composed from: DEU:38, POL:21, RUS:21
+  TIB    Tibet                                        78 provinces [NEW ERA ENTITY]
+           composed from: CHN:78
+  CAN    Canada                                       76 provinces
+           composed from: CAN:76
+  NPL    Nepal                                        75 provinces
+           composed from: NPL:75
+  ETH    Ethiopia                                     74 provinces
+           composed from: ETH:74
+  PAN    Panama                                       74 provinces
+           composed from: PAN:74
+  ISL    Iceland                                      69 provinces
+           composed from: ISL:69
+  FIN    Finland                                      68 provinces
+           composed from: FIN:68
+  OMN    Oman                                         61 provinces
+           composed from: OMN:61
+  SUR    Suriname                                     58 provinces
+           composed from: SUR:58
+  CHL    Chile                                        56 provinces
+           composed from: CHL:56
+  LTU    Lithuania                                    51 provinces
+           composed from: LTU:51
+  HTI    Haiti                                        42 provinces
+           composed from: HTI:42
+  ALB    Albania                                      36 provinces
+           composed from: ALB:36
+  URY    Uruguay                                      19 provinces
+           composed from: URY:19
+  GRC    Greece                                       14 provinces
+           composed from: GRC:14
+  LIE    Liechtenstein                                11 provinces
+           composed from: LIE:11
+  MCO    Monaco                                        9 provinces
+           composed from: MCO:9
+  SMR    San Marino                                    9 provinces
+           composed from: SMR:9
+  AND    Andorra                                       7 provinces
+           composed from: AND:7
+  DZG    Free City of Danzig                           2 provinces [NEW ERA ENTITY]
+           composed from: POL:2
+  ATA    Antarctica                                    1 provinces
+           composed from: ATA:1
+  111    Abyei                                         1 provinces
+           composed from: 111:1
+  113    CH-IN Disputed Area                           1 provinces
+           composed from: 113:1
+  114    Demchok                                       1 provinces
+           composed from: 114:1
+  118    Gaza Strip                                    1 provinces
+           composed from: 118:1
+  124    No Man's Land                                 1 provinces
+           composed from: 124:1
+
+-- Origin countries whose ENTIRE modern territory keeps its own code this era
+   (never a countryReassignments key, never touched by any regionReassignments carve) --
+   AFG, ALB, AND, ARG, ATA, AUS, AUT, BEL, BOL, BRA, BTN, CAN
+   CHE, CHL, COL, CRI, CUB, CZE, DEU, DNK, DOM, ECU, EGY, ESP
+   EST, ETH, FIN, FRA, GBR, GRC, GTM, HND, HTI, HUN, IRL, IRN
+   IRQ, ISL, ITA, JPN, LBR, LIE, LUX, LVA, MCO, MEX, MNG, NIC
+   NLD, NOR, NPL, NZL, OMN, PAN, PER, PRT, PRY, ROU, SAU, SLV
+   SMR, SUR, SWE, THA, TUR, URY, VEN, YEM, ZAF
+
+-- Origin countries that keep their modern code EXCEPT for specific listed ADM1 carve-outs --
+   BGR, CHN, LTU, POL, USA
+   (see the per-era JSON dump for exactly which regions were carved out of each)
+
+####################################################################################################
+ERA 1939  (start date 1939-09-01)
+####################################################################################################
+
+-- Countries active this era, by total province count --
+  GBR    British Empire                             6395 provinces [NEW ERA ENTITY]
+           composed from: JAM:816, NGA:774, IND:734, CYP:596, LCA:510, KEN:288, GHA:260, GBR:212, SDN:189, TZA:169, MYS:159, UGA:149, KWT:129, PAK:126, ZMB:116, LSO:78, SSD:78, ZWE:78, QAT:77, MMR:74, MLT:66, BGD:64, SWZ:53, JOR:52, VUT:50, SGP:49, GMB:48, SLB:46, BRN:37, BLZ:29, MWI:27, GUY:26, BWA:25, LKA:25, BHS:20, SOM:18, ISR:15, SLE:14, KNA:14, FJI:13, TTO:13, BRB:10, DMA:10, MUS:10, TON:8, ATG:7, ARE:7, GRD:6, SYC:6, VCT:5, BHR:3, TUV:2, KIR:1, 117:1, 119:1, 121:1, PSE:1
+  BRA    Brazil                                     5561 provinces
+           composed from: BRA:5560, 120:1
+  SOV    Soviet Union                               3338 provinces [NEW ERA ENTITY]
+           composed from: RUS:2188, UKR:386, KAZ:174, UZB:171, BLR:85, AZE:70, GEO:68, TKM:59, TJK:58, KGZ:40, ARM:39
+  USA    United States of America                   3273 provinces
+           composed from: USA:3187, PHL:86
+  ROU    Kingdom of Romania                         3273 provinces [NEW ERA ENTITY]
+           composed from: ROU:3208, MDA:37, BGR:15, UKR:13
+  JPN    Japan                                      2965 provinces
+           composed from: JPN:1683, CHN:439, TWN:351, KOR:222, PRK:174, PLW:67, FSM:15, USA:14
+  FRA    French Republic                            2479 provinces [NEW ERA ENTITY]
+           composed from: VNM:696, TUN:262, KHM:196, LAO:148, MDG:117, FRA:96, BEN:77, CAF:72, TCD:70, NER:67, MAR:61, SYR:61, CMR:58, MRT:57, MLI:50, GAB:49, DZA:48, COG:46, BFA:45, SEN:45, TGO:37, GIN:34, CIV:33, LBN:26, COM:17, DJI:11
+  MEX    Mexico                                     2428 provinces
+           composed from: MEX:2428
+  CHN    Republic of China                          1429 provinces [NEW ERA ENTITY]
+           composed from: CHN:1428, 112:1
+  COL    Colombia                                   1119 provinces
+           composed from: COL:1119
+  YUG    Kingdom of Yugoslavia                      1001 provinces [NEW ERA ENTITY]
+           composed from: HRV:517, SVN:186, SRB:145, MKD:82, XKX:35, MNE:23, BIH:12, 115:1
+  TUR    Turkey                                      969 provinces [NEW ERA ENTITY]
+           composed from: TUR:969
+  THA    Thailand                                    926 provinces
+           composed from: THA:926
+  NLD    Netherlands                                 842 provinces
+           composed from: IDN:502, NLD:340
+  PRT    Portugal                                    760 provinces
+           composed from: PRT:306, AGO:157, MOZ:156, TLS:65, GNB:39, CPV:30, STP:7
+  AUS    Australia                                   638 provinces
+           composed from: AUS:537, PNG:87, NRU:14
+  LVA    Latvia                                      543 provinces
+           composed from: LVA:543
+  ARG    Argentina                                   525 provinces
+           composed from: ARG:525
+  POL    Poland                                      470 provinces
+           composed from: POL:345, UKR:82, BLR:33, LTU:8, CZE:2
+  IRN    Iran                                        431 provinces
+           composed from: IRN:431
+  NOR    Norway                                      405 provinces
+           composed from: NOR:405
+  AFG    Afghanistan                                 396 provinces
+           composed from: AFG:396
+  ITA    Kingdom of Italy                            342 provinces [NEW ERA ENTITY]
+           composed from: SOM:100, ETH:74, ERI:58, ALB:36, ITA:24, LBY:22, SVN:22, HRV:6
+  BEL    Belgium                                     342 provinces
+           composed from: COD:172, BDI:119, RWA:30, BEL:21
+  GTM    Guatemala                                   340 provinces
+           composed from: GTM:340
+  MNG    Mongolia                                    334 provinces
+           composed from: MNG:334
+  VEN    Venezuela                                   334 provinces
+           composed from: VEN:334
+  YEM    Yemen                                       332 provinces
+           composed from: YEM:332
+  EGY    Egypt                                       322 provinces
+           composed from: EGY:322
+  HND    Honduras                                    293 provinces
+           composed from: HND:293
+  SWE    Sweden                                      285 provinces
+           composed from: SWE:285
+  SLV    El Salvador                                 260 provinces
+           composed from: SLV:260
+  BGR    Bulgaria                                    249 provinces
+           composed from: BGR:249
+  PRY    Paraguay                                    245 provinces
+           composed from: PRY:245
+  ECU    Ecuador                                     222 provinces
+           composed from: ECU:222
+  HUN    Kingdom of Hungary                          211 provinces [NEW ERA ENTITY]
+           composed from: HUN:198, UKR:13
+  BTN    Bhutan                                      206 provinces
+           composed from: BTN:205, 116:1
+  DEU    German Reich                                198 provinces [NEW ERA ENTITY]
+           composed from: AUT:89, DEU:38, POL:23, RUS:21, CZE:19, LTU:8
+  PER    Peru                                        196 provinces
+           composed from: PER:196
+  EST    Estonia                                     194 provinces
+           composed from: EST:194
+  MAN    Manchukuo                                   185 provinces [NEW ERA ENTITY]
+           composed from: CHN:185
+  CUB    Cuba                                        167 provinces
+           composed from: CUB:167
+  CHE    Switzerland                                 166 provinces
+           composed from: CHE:166
+  IRL    Ireland                                     165 provinces
+           composed from: IRL:165
+  DOM    Dominican Republic                          155 provinces
+           composed from: DOM:155
+  ZAF    Union of South Africa                       152 provinces [NEW ERA ENTITY]
+           composed from: NAM:100, ZAF:52
+  NIC    Nicaragua                                   151 provinces
+           composed from: NIC:151
+  SAU    Saudi Arabia                                147 provinces
+           composed from: SAU:147
+  NGM    Xibei San Ma                                143 provinces [NEW ERA ENTITY]
+           composed from: CHN:143
+  LBR    Liberia                                     134 provinces
+           composed from: LBR:134
+  NZL    New Zealand                                 129 provinces
+           composed from: NZL:86, WSM:43
+  BOL    Bolivia                                     110 provinces
+           composed from: BOL:110
+  LUX    Luxembourg                                  105 provinces
+           composed from: LUX:105
+  DNK    Denmark                                     101 provinces
+           composed from: DNK:95, GRL:6
+  IRQ    Iraq                                        101 provinces
+           composed from: IRQ:101
+  XJW    Xinjiang Clique                              87 provinces [NEW ERA ENTITY]
+           composed from: CHN:87
+  ESP    Nationalist Spain                            85 provinces [NEW ERA ENTITY]
+           composed from: ESP:50, GNQ:24, MAR:10, ESH:1
+  CRI    Costa Rica                                   83 provinces
+           composed from: CRI:83
+  SVK    Slovakia                                     79 provinces
+           composed from: SVK:79
+  TIB    Tibet                                        78 provinces [NEW ERA ENTITY]
+           composed from: CHN:78
+  CAN    Canada                                       76 provinces
+           composed from: CAN:76
+  NPL    Nepal                                        75 provinces
+           composed from: NPL:75
+  PAN    Panama                                       74 provinces
+           composed from: PAN:74
+  ISL    Iceland                                      69 provinces
+           composed from: ISL:69
+  FIN    Finland                                      68 provinces
+           composed from: FIN:68
+  OMN    Oman                                         61 provinces
+           composed from: OMN:61
+  SUR    Suriname                                     58 provinces
+           composed from: SUR:58
+  CHL    Chile                                        56 provinces
+           composed from: CHL:56
+  BOH    Protectorate of Bohemia and Moravia          56 provinces [NEW ERA ENTITY]
+           composed from: CZE:56
+  LTU    Lithuania                                    43 provinces
+           composed from: LTU:43
+  HTI    Haiti                                        42 provinces
+           composed from: HTI:42
+  URY    Uruguay                                      19 provinces
+           composed from: URY:19
+  GRC    Greece                                       14 provinces
+           composed from: GRC:14
+  LIE    Liechtenstein                                11 provinces
+           composed from: LIE:11
+  MCO    Monaco                                        9 provinces
+           composed from: MCO:9
+  SMR    San Marino                                    9 provinces
+           composed from: SMR:9
+  AND    Andorra                                       7 provinces
+           composed from: AND:7
+  ATA    Antarctica                                    1 provinces
+           composed from: ATA:1
+  111    Abyei                                         1 provinces
+           composed from: 111:1
+  113    CH-IN Disputed Area                           1 provinces
+           composed from: 113:1
+  114    Demchok                                       1 provinces
+           composed from: 114:1
+  118    Gaza Strip                                    1 provinces
+           composed from: 118:1
+  124    No Man's Land                                 1 provinces
+           composed from: 124:1
+
+-- Origin countries whose ENTIRE modern territory keeps its own code this era
+   (never a countryReassignments key, never touched by any regionReassignments carve) --
+   AFG, AND, ARG, ATA, AUS, BEL, BOL, BRA, BTN, CAN, CHE, CHL
+   COL, CRI, CUB, DEU, DNK, DOM, ECU, EGY, ESP, EST, FIN, FRA
+   GBR, GRC, GTM, HND, HTI, HUN, IRL, IRN, IRQ, ISL, ITA, JPN
+   LBR, LIE, LUX, LVA, MCO, MEX, MNG, NIC, NLD, NOR, NPL, NZL
+   OMN, PAN, PER, PRT, PRY, ROU, SAU, SLV, SMR, SUR, SVK, SWE
+   THA, TUR, URY, VEN, YEM, ZAF
+
+-- Origin countries that keep their modern code EXCEPT for specific listed ADM1 carve-outs --
+   BGR, CHN, LTU, POL, USA
+   (see the per-era JSON dump for exactly which regions were carved out of each)

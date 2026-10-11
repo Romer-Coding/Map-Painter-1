@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map Painter 1 — WebGL Rendering Proof of Concept</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #182a63; overflow: hidden; }
+    #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+    #hud {
+        position: absolute; top: 14px; left: 14px; z-index: 10;
+        display: flex; gap: 14px;
+        background: rgba(10, 8, 5, 0.72); color: #e8dcc0;
+        font-family: 'Courier New', Courier, monospace; font-size: 13px; font-weight: bold;
+        padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(232, 220, 192, 0.25);
+        pointer-events: none;
+    }
+    #note {
+        position: absolute; top: 14px; right: 14px; z-index: 10; max-width: 360px;
+        background: rgba(10, 8, 5, 0.8); color: #e8dcc0;
+        font-family: -apple-system, Segoe UI, Arial, sans-serif; font-size: 12.5px; line-height: 1.5;
+        padding: 12px 14px; border-radius: 8px; border: 1px solid rgba(232, 220, 192, 0.25);
+    }
+    #note strong { color: #f0c56b; }
+    #loading {
+        position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+        background: #182a63; color: #e8dcc0; font-family: sans-serif; font-size: 15px;
+    }
+</style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loading">Loading full 49,245-shape dataset (no simplification, no merging)…</div>
+    <div id="hud">
+        <span id="fps">-- FPS</span>
+        <span id="zoom">zoom --</span>
+        <span id="featcount">-- features</span>
+    </div>
+    <div id="note">
+        <strong>WebGL rendering proof-of-concept (MapLibre GL)</strong><br>
+        Same raw <code>custom_geo.json</code> as the Leaflet game — all 49,245 municipality
+        shapes, full survey precision, no <code>topojson.simplify()</code>, no municipality
+        merging, no zoom-gated attach/detach, no manual world-wrap tripling (MapLibre's
+        <code>renderWorldCopies</code> handles continuous scrolling natively). Colored by
+        country, matching the game's own palette/hash logic. Pan and zoom fast — this is
+        the direct comparison point against <code>world_map_v2.html</code>'s FPS/zoom HUD.
+    </div>
+
+    <script>
+        // --- Same palette/hash color logic as world_map_v2.html's getCountryColor(),
+        // so this is a fair visual comparison, not just a performance one. ---
+        const PALETTE = [
+            '#5c9770', '#6bab7f', '#9bab5c', '#c2b565', '#c99a5c', '#d4a86a',
+            '#b06b5c', '#c97a5f', '#a888a3', '#7fa0b5', '#5c8a99', '#6ba3a3',
+            '#a08a5c', '#ab9a6b', '#8a6ba0', '#a3809c', '#6ba088', '#87ab87',
+            '#c2895c', '#8a9cab', '#6b7fab', '#a08fab', '#c58a95', '#6bb5b8',
+            '#c2735c', '#d4a35c', '#7a9c5c', '#b8a05c'
+        ];
+        function hashString(str) {
+            if (!str) return 0;
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return Math.abs(hash);
+        }
+        function getCountryColor(shapeGroup) {
+            if (!shapeGroup) return '#8a8a8a';
+            return PALETTE[hashString(shapeGroup) % PALETTE.length];
+        }
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    basemap: {
+                        type: 'raster',
+                        // Same NASA GIBS Blue Marble WMTS endpoint the Leaflet version uses —
+                        // free, no API key, native to zoom 8.
+                        tiles: ['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg'],
+                        tileSize: 256,
+                        maxzoom: 8,
+                        attribution: 'Imagery: NASA EOSDIS GIBS / Blue Marble'
+                    }
+                },
+                layers: [
+                    { id: 'basemap', type: 'raster', source: 'basemap' }
+                ]
+            },
+            center: [0, 20],
+            zoom: 2,
+            minZoom: 1.5,
+            maxZoom: 10,
+            renderWorldCopies: true, // MapLibre's built-in continuous-wrap — no manual +-360 duplication needed
+            attributionControl: true
+        });
+        map.addControl(new maplibregl.NavigationControl());
+
+        map.on('load', async function() {
+            const [topoRes, lookupRes] = await Promise.all([
+                fetch('custom_geo.json'),
+                fetch('country_lookup.json')
+            ]);
+            const topology = await topoRes.json();
+            const targetObject = topology.objects.geoBoundariesCGAZ_ADM2;
+
+            // Deliberately NOT simplified, NOT merged — the full raw dataset, to test
+            // whether GPU vector rendering handles it without any of the CPU-side
+            // mitigations the Leaflet/Canvas2D version needed.
+            const geojson = topojson.feature(topology, targetObject);
+            document.getElementById('featcount').textContent = geojson.features.length.toLocaleString() + ' features';
+            document.getElementById('loading').style.display = 'none';
+
+            // Build a data-driven color expression once: ['match', ['get','shapeGroup'], code1, color1, code2, color2, ..., defaultColor]
+            const countryCodes = Array.from(new Set(geojson.features.map(function(f) { return f.properties.shapeGroup; })));
+            const matchExpr = ['match', ['get', 'shapeGroup']];
+            countryCodes.forEach(function(code) { matchExpr.push(code, getCountryColor(code)); });
+            matchExpr.push('#8a8a8a');
+
+            map.addSource('municipalities', { type: 'geojson', data: geojson });
+            map.addLayer({
+                id: 'municipality-fill',
+                type: 'fill',
+                source: 'municipalities',
+                paint: { 'fill-color': matchExpr, 'fill-opacity': 0.55 }
+            });
+            map.addLayer({
+                id: 'municipality-border',
+                type: 'line',
+                source: 'municipalities',
+                paint: { 'line-color': '#161310', 'line-width': 0.5, 'line-opacity': 0.4 }
+            });
+        });
+
+        // Same FPS + zoom HUD approach as world_map_v2.html's debug overlay, for a
+        // like-for-like readout to compare against.
+        let frameCount = 0;
+        let sampleStart = performance.now();
+        function frameLoop(now) {
+            frameCount++;
+            const elapsed = now - sampleStart;
+            if (elapsed >= 500) {
+                document.getElementById('fps').textContent = Math.round(frameCount * 1000 / elapsed) + ' FPS';
+                frameCount = 0;
+                sampleStart = now;
+            }
+            requestAnimationFrame(frameLoop);
+        }
+        requestAnimationFrame(frameLoop);
+        function updateZoomReadout() {
+            document.getElementById('zoom').textContent = 'zoom ' + map.getZoom().toFixed(2);
+        }
+        map.on('zoom', updateZoomReadout);
+        map.on('move', updateZoomReadout);
+        updateZoomReadout();
+    </script>
+</body>
+</html>

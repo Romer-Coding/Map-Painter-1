@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Painter 1 — Offline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='menu.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ============================================================
+     MENU SHELL — Games / Presets / Flags. This is the landing
+     screen. Selecting a country (or building a custom entity)
+     calls /api/new_game and switches to #game-shell below.
+     ============================================================ -->
+<div id="menu-shell">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="brand">MP1</div>
+      <div class="nav">
+        <button class="nav-item active" data-screen="games" onclick="go('games')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M7 10v4M5 12h4M15 11h.01M18 13h.01"/></svg>
+          <span>Games</span>
+        </button>
+        <button class="nav-item" data-screen="presets" onclick="go('presets')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+          <span>Presets</span>
+        </button>
+        <button class="nav-item" data-screen="flags" onclick="go('flags')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V4m0 0h13l-2.5 4L17 12H4"/></svg>
+          <span>Flags</span>
+        </button>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="wallet"><span class="coin"></span> Offline mode</div>
+      <div class="avatar">P</div>
+    </div>
+  </div>
+
+  <main>
+    <!-- GAMES -->
+    <section class="screen active" id="screen-games">
+      <div class="page-head">
+        <div class="page-title">Your Games <span class="dim">/ All</span></div>
+      </div>
+      <div class="section-title">Continue Playing</div>
+      <div class="card-row" id="continue-row"></div>
+    </section>
+
+    <!-- PRESETS -->
+    <section class="screen" id="screen-presets">
+      <div class="page-head">
+        <div class="page-title">Presets</div>
+      </div>
+      <div class="hero" id="hero-banner">
+        <div class="hero-content">
+          <h2 id="hero-title">Modern Day</h2>
+          <div class="stats" id="hero-stats"></div>
+          <p id="hero-desc"></p>
+          <button class="btn btn-primary" onclick="openPresetDetail(0)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg> Open
+          </button>
+        </div>
+        <div class="hero-dots" id="hero-dots"></div>
+      </div>
+      <div class="section-title">Most Played</div>
+      <div class="card-grid" id="preset-grid"></div>
+    </section>
+
+    <!-- PRESET DETAIL -->
+    <section class="screen" id="screen-detail">
+      <a class="back-link" onclick="go('presets')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M15 18l-6-6 6-6"/></svg> Back to Presets
+      </a>
+      <div class="detail-hero" id="detail-hero">
+        <div class="detail-heading">
+          <h1 id="detail-title">Modern Day</h1>
+          <div class="by" id="detail-by">by Map Painter 1</div>
+        </div>
+      </div>
+
+      <div class="stat-strip" id="detail-stats"></div>
+
+      <div class="action-row">
+        <span class="spacer"></span>
+        <button class="play-now" onclick="openPicker()"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg> Play Now</button>
+      </div>
+
+      <div class="detail-body">
+        <div class="info-block">
+          <h3>About This Preset <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg></h3>
+          <div class="tagset">
+            <span class="tag-pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg> <span id="detail-start"></span></span>
+            <span class="tag-pill" id="detail-type"></span>
+          </div>
+          <p id="detail-about"></p>
+        </div>
+        <div class="info-block">
+          <h3>The World Before Start Date</h3>
+          <p id="detail-before"></p>
+        </div>
+        <div class="info-block">
+          <h3>
+            Simulation Rules <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+            <button class="edit-toggle" id="rules-edit-btn" onclick="toggleRulesEdit(true)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit
+            </button>
+          </h3>
+          <p class="rules-hint">Constraints and guidelines for the AI. Define allowed actions, limits, objectives, and any special mechanics.</p>
+          <p id="detail-rules-view" class="rules-view"></p>
+          <div class="rules-edit-box" id="detail-rules-box">
+            <textarea id="detail-rules-edit"></textarea>
+            <div class="action-row">
+              <button class="btn btn-accent" onclick="saveRules()">Save Rules</button>
+              <button class="btn btn-ghost" onclick="toggleRulesEdit(false)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div class="info-block">
+          <h3>Region Map</h3>
+          <div class="map-frame" style="height:420px;">
+            <div class="map-tools"><div class="map-fab"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div></div>
+            <svg id="detail-map" viewBox="0 0 1000 500" style="width:100%;height:100%;"></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FLAGS -->
+    <section class="screen" id="screen-flags">
+      <div class="page-head"><div class="page-title">Flags</div></div>
+      <div class="flag-toolbar">
+        <div class="flag-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input placeholder="Search flags..."></div>
+        <div class="sel-dropdown">Approved <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></div>
+      </div>
+      <div class="filter-pills">
+        <button class="fpill active">Recent</button>
+        <button class="fpill">Popular</button>
+        <button class="fpill">European Flags</button>
+        <button class="fpill">North America</button>
+      </div>
+      <div class="flag-grid" id="flag-grid"></div>
+    </section>
+  </main>
+
+  <!-- Country picker overlay -->
+  <div class="overlay" id="picker-overlay">
+    <div class="picker-panel">
+      <div class="picker-tabs">
+        <button class="ptab active" data-tab="picks" onclick="setPickerTab('picks')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 6 6 .9-4.5 4.3 1 6.3L12 16.9 6.5 19.5l1-6.3L3 8.9 9 8z"/></svg> Picks
+        </button>
+        <button class="ptab" data-tab="all" onclick="setPickerTab('all')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> All polities
+        </button>
+        <button class="ptab" data-tab="custom" onclick="setPickerTab('custom')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Custom
+        </button>
+        <button class="picker-close" onclick="closePicker()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+
+      <div id="picker-list-wrap">
+        <div class="picker-search"><input id="country-search" placeholder="Search polities..." oninput="renderCountryList()"></div>
+        <div class="picker-list" id="country-list"></div>
+        <div class="picker-footer">
+          <div class="difficulty-row">
+            <span>Difficulty</span>
+            <select id="difficulty-select" onchange="mstate.difficulty=this.value">
+              <option>Very Easy</option><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Impossible</option>
+            </select>
+          </div>
+          <button class="btn btn-accent" style="width:100%;justify-content:center;" id="picker-cta" onclick="confirmPlay()" disabled>Select a country</button>
+        </div>
+      </div>
+
+      <div id="custom-wrap" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div class="custom-panel">
+          <p style="color:var(--m-text-dim);font-size:13px;line-height:1.55;">This is a complete sandbox — play from any entity or viewpoint you want. This adds a new entity to the game and the AI will automatically adjust.</p>
+
+          <label>Entity Name &amp; (Optional) Image</label>
+          <div class="entity-row">
+            <div class="img-upload"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg></div>
+            <input class="text-input" id="entity-name" placeholder="e.g. a country, faction, person...">
+          </div>
+
+          <label>Entity Color</label>
+          <div class="color-tabs"><button class="ctab active">Swatches</button></div>
+          <div class="swatch-grid" id="swatch-grid"></div>
+
+          <label>Entity Lore (Optional)<span class="hint">Describe the background, culture, goals, or characteristics of your entity. This is added to the simulation rules so the AI knows how to portray your entity.</span></label>
+          <textarea class="text-input" id="entity-lore" placeholder="A breakaway technocratic city-state founded by..."></textarea>
+
+          <label>Starting Regions (Optional)<span class="hint">Select regions your entity will start with. If none are selected, your entity starts without territory.</span></label>
+          <div class="region-chips" id="region-chips"></div>
+          <div class="region-add" style="margin-top:8px;cursor:pointer;" onclick="openPicker(); setPickerTab('all'); pickingRegionsFor='custom';">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Search regions or countries...
+          </div>
+        </div>
+        <div class="picker-footer">
+          <div class="difficulty-row">
+            <span>Difficulty</span>
+            <select id="difficulty-select-custom" onchange="mstate.difficulty=this.value">
+              <option>Very Easy</option><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Impossible</option>
+            </select>
+          </div>
+          <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="confirmCustom()">Create Entity &amp; Play</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="map-stage">
+      <svg id="worldmap" viewBox="0 0 1000 500"></svg>
+      <div class="selected-banner" id="selected-banner">
+        <span class="flag" id="banner-flag"></span>
+        <span class="name" id="banner-name"></span>
+      </div>
+      <div class="map-legend">Click a marker or a name in the list to select a polity</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     GAME SHELL — dossier / sitrep feed / console. Hidden until
+     a game is started or resumed from the menu above.
+     ============================================================ -->
+<div id="game-shell" style="display:none;">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="seal">MP1</div>
+      <div>
+        <h1>Map Painter 1 <span style="color:var(--ink-dim); font-weight:400;">— Offline</span></h1>
+      </div>
+      <span class="tag" id="difficultyTag"></span>
+    </div>
+    <div class="status-cluster">
+      <div class="field">
+        <span class="label">Nation</span>
+        <span class="value" id="hdrNation">—</span>
+      </div>
+      <div class="field">
+        <span class="label">Date</span>
+        <span class="value" id="hdrDate">—</span>
+      </div>
+      <div class="field">
+        <span class="label">Round</span>
+        <span class="value" id="hdrRound">—</span>
+      </div>
+      <div class="field">
+        <span class="label">GPT4All</span>
+        <span class="value"><span class="dot bad" id="connDot"></span><span id="connLabel">checking…</span></span>
+      </div>
+      <button class="icon-btn" id="btnSettings">⚙ SETTINGS</button>
+      <button class="icon-btn" id="btnNewGame">☰ MENU</button>
+    </div>
+  </div>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+  <div class="layout">
+    <div class="col">
+      <div class="col-header">Nation Dossier</div>
+      <div class="dossier" id="statsBox"></div>
+      <div class="col-header">Relations</div>
+      <div class="relations-list" id="relationsBox">
+        <div class="empty-note">No relations established yet.</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-header">Sitrep Wire Feed</div>
+      <div class="feed" id="feedBox">
+        <div class="empty-note">No dispatches yet. Start a new game to begin.</div>
+      </div>
+    </div>
+
+    <div class="col console">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="actions">Actions</button>
+        <button class="tab-btn" data-tab="advisor">Advisor</button>
+        <button class="tab-btn" data-tab="diplomacy">Diplomacy</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-actions">
+        <div class="field-label">Freehand Action</div>
+        <textarea id="actionInput" rows="4" placeholder="e.g. Open backchannel trade talks with Vietnam and offer tariff reductions on textiles."></textarea>
+        <div class="btn-row">
+          <button class="btn" id="btnPolish">✎ Polish with AI</button>
+          <button class="btn primary" id="btnQueue">+ Queue Action</button>
+        </div>
+        <div class="field-label" style="margin-top:18px;">Queued for Next Jump</div>
+        <div class="pending-list" id="pendingList">
+          <div class="empty-note">No actions queued. A jump with no actions lets the world drift on its own.</div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-advisor">
+        <div class="qa-log" id="advisorLog"></div>
+        <div class="field-label">Ask the Advisor</div>
+        <textarea id="advisorInput" rows="3" placeholder="What's our biggest vulnerability right now?"></textarea>
+        <div class="btn-row"><button class="btn primary" id="btnAskAdvisor">Ask</button></div>
+      </div>
+
+      <!-- Diplomacy: only reachable here, in-game, once a nation is picked — not from the main menu. -->
+      <div class="tab-panel" id="tab-diplomacy">
+        <div class="diplo-target">
+          <div class="field-label">Speaking With</div>
+          <select id="diploTarget"></select>
+        </div>
+        <div class="chat-log" id="diploLog"></div>
+        <div class="field-label">Message</div>
+        <textarea id="diploInput" rows="3" placeholder="Propose a joint naval exercise in the strait..."></textarea>
+        <div class="btn-row"><button class="btn primary" id="btnSendDiplo">Send</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="jumpbar">
+    <div class="field-label" style="margin:0;">Time Jump</div>
+    <div class="duration-group" id="durationGroup">
+      <button class="duration-btn" data-d="1 week">1 WK</button>
+      <button class="duration-btn selected" data-d="1 month">1 MO</button>
+      <button class="duration-btn" data-d="3 months">3 MO</button>
+      <button class="duration-btn" data-d="6 months">6 MO</button>
+      <button class="duration-btn" data-d="1 year">1 YR</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn small" id="btnRewind">↺ Rewind</button>
+    <button class="btn small" id="btnSave">⬇ Save</button>
+    <button class="btn small" id="btnLoad">⬆ Load</button>
+    <button class="jump-btn" id="btnJump">JUMP FORWARD ▶</button>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal" style="display:none;">
+    <div class="modal" style="width:560px;">
+      <h2>Settings</h2>
+      <div class="sub">Connection to your local GPT4All server, and the 8 prompt categories that drive the sim.</div>
+
+      <div class="field"><label>GPT4All Base URL</label><input type="text" id="stBaseUrl"></div>
+      <div class="field"><label>Model Name (as shown in GPT4All)</label><input type="text" id="stModel"></div>
+      <div class="field"><label>Temperature</label><input type="number" step="0.05" id="stTemp"></div>
+      <div class="field"><label>Max Tokens</label><input type="number" id="stMaxTokens"></div>
+      <div class="btn-row"><button class="btn primary" id="btnSaveSettings">Save Connection Settings</button></div>
+
+      <hr style="border-color:var(--border); margin:20px 0;">
+
+      <div class="prompt-editor">
+        <div class="field">
+          <label>Prompt Category</label>
+          <select id="promptCategory"></select>
+        </div>
+        <textarea id="promptText"></textarea>
+        <div class="btn-row">
+          <button class="btn primary" id="btnSavePrompt">Save Prompt</button>
+          <button class="btn" id="btnResetPrompt">Reset to Default</button>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:20px;">
+        <button class="btn" id="btnCloseSettings">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Modal -->
+  <div class="modal-overlay" id="loadModal" style="display:none;">
+    <div class="modal">
+      <h2>Load Game</h2>
+      <div class="sub">Choose a saved timeline.</div>
+      <div id="savesList"></div>
+      <div class="btn-row"><button class="btn" id="btnCloseLoad">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Rewind Modal -->
+  <div class="modal-overlay" id="rewindModal" style="display:none;">
+    <div class="modal">
+      <h2>Rewind</h2>
+      <div class="sub">Revert the timeline to the end of a previous round.</div>
+      <div id="rewindList"></div>
+      <div class="btn-row"><button class="btn" id="btnCloseRewind">Close</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="loading-veil" id="loadingVeil">
+  <div class="spinner"></div>
+  <div id="loadingText">Simulating…</div>
+</div>
+
+<script src="{{ url_for('static', filename='menu.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script>
+  // menu.js defines initMenu(); app.js's init() runs its own health check
+  // and state sync independently. Kick off the menu landing screen here.
+  initMenu();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600">
+  <!-- Ottoman Empire, late-period state flag (public-domain historical design):
+       red field with white crescent and five-pointed star. -->
+  <rect width="900" height="600" fill="#E30A17"/>
+  <circle cx="360" cy="300" r="150" fill="#ffffff"/>
+  <circle cx="397" cy="300" r="121" fill="#E30A17"/>
+  <polygon fill="#ffffff" points="663,300 609.3,282.4 609.1,225.8 575.7,271.5 521.9,254.1 555,300 521.9,345.9 575.7,328.5 609.1,374.2 609.3,317.6"/>
+</svg>

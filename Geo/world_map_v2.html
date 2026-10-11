@@ -1,0 +1,3469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Strategy Offline Interactive Map Engine</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #182a63; /* Rich atlas-navy ocean */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            /* Tell the browser this page is dark-themed so native form controls
+               (select dropdown popups, scrollbars, etc.) render with a dark
+               palette instead of the OS default white — without this, a
+               <select>'s open option list can render white text on a
+               browser-default white background even though the closed box
+               looks fine. */
+            color-scheme: dark;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #182a63;
+        }
+        /* Dev/perf HUD (temporary — see window.onload's initDebugHud()) */
+        #debug-hud {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 1000;
+            display: flex;
+            gap: 14px;
+            background: rgba(10, 8, 5, 0.72);
+            color: #e8dcc0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(232, 220, 192, 0.25);
+            pointer-events: none;
+            letter-spacing: 0.02em;
+        }
+        /* Loader Overlays */
+        #loader {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(10, 23, 48, 0.95);
+            color: #e0e6ed;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #1f2937;
+            border-top: 5px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Global parchment/wave grain texture, laid over the whole map so both ocean
+           and land pick up the subtle mottled, hand-painted look */
+        #texture-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 420;
+            mix-blend-mode: overlay;
+            opacity: 0.1;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+            background-repeat: repeat;
+        }
+
+        /* Country name labels ("atlas watermark" style). Rendered as SVG <text> on a
+           <textPath> that traces each country's own coastline "spine" (see
+           computeSpineLatLngs) so names like BRAZIL or UNITED STATES OF AMERICA curve
+           to follow the landmass, instead of sitting on a
+           single straight rotated line. */
+        .country-label-layer {
+            overflow: visible;
+        }
+        .country-label-path {
+            fill: none;
+            stroke: none;
+        }
+        .country-label-text {
+            pointer-events: none;
+            font-family: 'Fraunces', 'Segoe UI', serif;
+            font-optical-sizing: auto;
+            font-weight: 700;
+            text-transform: uppercase;
+            fill: #f4ecd9;
+            paint-order: stroke fill;
+            stroke: #040a16;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 0 3px rgba(0,0,0,0.45));
+            text-anchor: middle;
+            /* Labels only recompute size/opacity once a zoom/pan gesture settles (see
+               updateLabelLayout) rather than every animation frame, to avoid fighting
+               Leaflet's own CSS-transform zoom animation. Easing the actual property
+               change here means that settle-point recalculation glides in instead of
+               popping instantly, which is what read as "takes a while to update". */
+            transition: font-size 0.18s ease-out, opacity 0.18s ease-out,
+                        stroke-width 0.18s ease-out;
+        }
+
+        /* City / military-unit point features. Unlike country labels these don't ride
+           a <textPath> — they're a fixed icon (star = capital, diamond = major city,
+           square = player-placed military unit) with a name label anchored just below
+           it, both driven by the "Feature Size" settings sliders (this is what those
+           sliders actually control, per user clarification —
+           country-name sizing is intentionally independent of them). */
+        .feature-icon {
+            stroke: #040a16;
+            stroke-linejoin: round;
+            transition: opacity 0.18s ease-out;
+        }
+        .feature-icon.city-icon {
+            fill: #f4ecd9;
+            stroke-width: 1;
+        }
+        .feature-icon.capital-icon {
+            fill: #ecc96b;
+            stroke-width: 1.1;
+        }
+        .feature-icon.unit-icon {
+            fill: #b6392f;
+            stroke: #1a0605;
+            cursor: pointer;
+        }
+        .feature-label-text {
+            pointer-events: none;
+            font-family: 'Fraunces', 'Segoe UI', serif;
+            font-weight: 500;
+            fill: #f4ecd9;
+            paint-order: stroke fill;
+            stroke: #040a16;
+            stroke-linejoin: round;
+            stroke-width: 0.5px;
+            text-anchor: middle;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+            transition: opacity 0.18s ease-out;
+        }
+        .feature-label-text.unit-label { fill: #f0c9c2; cursor: pointer; }
+        #map.placing-unit-cursor { cursor: crosshair; }
+
+        /* Themed "name this unit" modal — replaces window.prompt() so naming a unit
+           matches the rest of the atlas-panel UI instead of popping an ugly native
+           browser dialog (native prompt()/confirm() also blocks the page's JS thread
+           entirely until dismissed, which is bad UX and untestable via automation). */
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(4, 10, 22, 0.55);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-card {
+            width: 300px;
+            background: rgba(10, 23, 48, 0.97);
+            border: 1px solid rgba(244,236,217,0.25);
+            border-radius: 10px;
+            padding: 18px 20px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+            color: #f4ecd9;
+        }
+        .modal-card h3 {
+            margin: 0 0 12px;
+            font-family: 'Fraunces', 'Segoe UI', serif;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-size: 14px;
+        }
+        .modal-card input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            background: rgba(244,236,217,0.1);
+            border: 1px solid rgba(244,236,217,0.3);
+            border-radius: 6px;
+            color: #f4ecd9;
+            font-size: 14px;
+            padding: 8px 10px;
+            margin-bottom: 14px;
+        }
+        .modal-card input[type="text"]:focus { outline: 2px solid #c9a05c; }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .modal-actions button {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            font-size: 13px;
+            border-radius: 6px;
+            border: 1px solid rgba(244,236,217,0.25);
+            padding: 6px 14px;
+            cursor: pointer;
+        }
+        .modal-actions .modal-cancel-btn {
+            background: transparent;
+            color: #f4ecd9;
+        }
+        .modal-actions .modal-confirm-btn {
+            background: #c9a05c;
+            color: #1a0a05;
+            font-weight: 600;
+            border-color: #c9a05c;
+        }
+
+        /* --- Map & Display settings panel (gear-icon
+           settings UI: fullscreen toggle + zoom/border/feature-size sliders) --- */
+        .settings-toggle-btn {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            z-index: 1000;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid rgba(244,236,217,0.25);
+            background: rgba(10, 23, 48, 0.85);
+            color: #f4ecd9;
+            font-size: 19px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .settings-toggle-btn:hover { background: rgba(20, 38, 74, 0.95); }
+
+        .settings-panel {
+            position: absolute;
+            top: 62px;
+            right: 14px;
+            z-index: 1000;
+            width: 260px;
+            background: rgba(10, 23, 48, 0.92);
+            border: 1px solid rgba(244,236,217,0.2);
+            border-radius: 10px;
+            padding: 14px 16px 16px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            color: #f4ecd9;
+            font-size: 13px;
+            display: none;
+        }
+        .settings-panel.open { display: block; }
+        .settings-header {
+            font-family: 'Fraunces', 'Segoe UI', serif;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-size: 13px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(244,236,217,0.2);
+        }
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+        .settings-row:last-child { margin-bottom: 0; }
+        .settings-row label {
+            opacity: 0.9;
+        }
+        .settings-row.slider-row {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
+        }
+        .settings-row.slider-row label {
+            display: flex;
+            justify-content: space-between;
+        }
+        .settings-row.slider-row input[type="range"] {
+            width: 100%;
+            accent-color: #c9a05c;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            border-radius: 11px;
+            border: none;
+            background: rgba(244,236,217,0.25);
+            cursor: pointer;
+            padding: 0;
+            flex-shrink: 0;
+        }
+        .toggle-switch .toggle-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #f4ecd9;
+            transition: left 0.15s ease-out;
+        }
+        .toggle-switch[aria-pressed="true"] { background: #c9a05c; }
+        .toggle-switch[aria-pressed="true"] .toggle-knob { left: 20px; }
+
+        /* ==================================================================
+           Gameplay UI: Actions / Chat / Advisor / Search / Jump Forward.
+           Reuses the same dark-navy/gold "atlas panel" language as the
+           existing Map & Display settings panel so everything reads as one
+           consistent UI system.
+           ================================================================== */
+        .corner-icon-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 1px solid rgba(244,236,217,0.25);
+            background: rgba(10, 23, 48, 0.88);
+            color: #f4ecd9;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+        }
+        .corner-icon-btn:hover { background: rgba(20, 38, 74, 0.95); }
+        .corner-icon-btn.active { background: #c9a05c; color: #1a0a05; }
+
+        #left-cluster {
+            position: absolute; left: 16px; bottom: 16px; z-index: 1000;
+            display: flex; flex-direction: row; gap: 10px;
+        }
+
+        #actions-cluster {
+            position: absolute; right: 16px; bottom: 16px; z-index: 1000;
+            display: flex; flex-direction: row-reverse; gap: 10px;
+        }
+        #advisor-launcher.player-color-ring { border-width: 2px; }
+
+        #date-pill {
+            position: absolute;
+            top: 14px; left: 50%; transform: translateX(-50%);
+            z-index: 1000;
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(10, 23, 48, 0.88);
+            border: 1px solid rgba(244,236,217,0.25);
+            border-radius: 22px;
+            padding: 8px 8px 8px 16px;
+            color: #f4ecd9;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+        #date-pill .date-pill-text { font-weight: 600; font-size: 14px; white-space: nowrap; }
+        #date-pill .date-pill-round { font-size: 11px; opacity: 0.65; margin-right: 4px; }
+        #date-pill button {
+            width: 30px; height: 30px; border-radius: 50%;
+            border: 1px solid rgba(244,236,217,0.25);
+            background: rgba(244,236,217,0.08);
+            color: #f4ecd9; cursor: pointer; font-size: 15px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #date-pill button:hover { background: rgba(244,236,217,0.18); }
+        #date-pill button:disabled { opacity: 0.35; cursor: default; }
+
+        /* Generic side/bottom panel shell shared by Actions, Advisor, Search */
+        .game-panel {
+            position: absolute;
+            z-index: 1500;
+            width: 340px;
+            max-height: 70vh;
+            background: rgba(8, 18, 40, 0.97);
+            border: 1px solid rgba(244,236,217,0.22);
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.55);
+            color: #f4ecd9;
+            display: none;
+            flex-direction: column;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            font-size: 13px;
+        }
+        .game-panel.open { display: flex; }
+        /* Right-anchored cluster (Actions, Search, Advisor) and left-anchored
+           cluster (Chat, Country Details) are each laid out side-by-side, wide
+           enough apart to sit next to their neighbor's full width, so any
+           combination of these panels can be open at once without overlapping. */
+        #actions-panel { right: 16px; bottom: 74px; }
+        #search-panel { right: 372px; bottom: 74px; width: 300px; }
+        #advisor-panel { right: 688px; bottom: 74px; width: 480px; max-height: 76vh; }
+        #chat-panel { left: 16px; bottom: 74px; width: 380px; }
+        #country-detail-panel { left: 412px; bottom: 74px; width: 420px; max-height: 80vh; }
+
+        /* Country Details panel — opened via the (i) button on a country row in
+           the Map Feature popup. Reuses .event-card/.game-btn/.game-panel styling
+           for visual consistency with the rest of the UI. */
+        .country-detail-header-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .country-detail-header-main h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .country-detail-flag-wrap {
+            width: 30px; height: 22px; flex-shrink: 0; border-radius: 4px; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(244,236,217,0.25); background: rgba(244,236,217,0.06);
+        }
+        .country-detail-flag-wrap img { width: 100%; height: 100%; object-fit: cover; }
+        .country-detail-flag-wrap .country-flag-badge { width: 100%; height: 100%; border-radius: 0; border: none; font-size: 10px; }
+        .country-detail-section-title-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+        .country-detail-section-title {
+            font-family: 'Fraunces', 'Segoe UI', serif; font-weight: 700; font-size: 13px;
+            letter-spacing: 0.03em; text-transform: uppercase;
+        }
+        .country-detail-events-count { font-size: 11px; opacity: 0.6; }
+        .related-events-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+        .related-events-toolbar input { flex: 1; }
+        #country-detail-filter-btn.active { background: #9b78dc; border-color: #9b78dc; color: #1a0a05; }
+        .country-detail-events-list { max-height: 300px; overflow-y: auto; margin-bottom: 4px; }
+        .country-detail-events-list .event-card:last-child { margin-bottom: 0; }
+        .detail-columns { display: flex; gap: 18px; }
+        .detail-column { flex: 1; min-width: 0; }
+        .detail-column-title {
+            font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.03em;
+            margin-bottom: 8px; font-weight: 600;
+        }
+        .detail-pill-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+        .detail-pill {
+            background: rgba(244,236,217,0.08); border: 1px solid rgba(244,236,217,0.22);
+            border-radius: 12px; padding: 4px 10px; font-size: 11.5px;
+        }
+        .detail-pill-more { opacity: 0.6; font-style: italic; }
+        .country-detail-status-note {
+            background: rgba(240,168,96,0.1); border: 1px solid rgba(240,168,96,0.35);
+            border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; color: #f4d9b8;
+            white-space: pre-line;
+        }
+
+        /* Advisor/Lore shared left icon rail — lets the panel switch between the
+           two sub-views without closing, matching the reference screenshots. */
+        .game-panel-railed.open { flex-direction: row; padding: 0; }
+        .panel-icon-rail {
+            width: 46px; flex-shrink: 0;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 14px 0;
+            border-right: 1px solid rgba(244,236,217,0.16);
+            background: rgba(244,236,217,0.03);
+            border-radius: 12px 0 0 12px;
+        }
+        .rail-icon-btn {
+            width: 32px; height: 32px; border-radius: 8px;
+            border: 1px solid rgba(244,236,217,0.2);
+            background: transparent; color: #f4ecd9;
+            cursor: pointer; font-size: 15px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .rail-icon-btn:hover { background: rgba(244,236,217,0.1); }
+        .rail-icon-btn.active { background: #9b78dc; color: #1a0a05; border-color: #9b78dc; }
+        .panel-main-col { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+        .panel-subview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+        /* Lore panel */
+        .lore-timeline-track {
+            display: flex; align-items: center; gap: 6px; overflow-x: auto;
+            padding-bottom: 10px; margin-bottom: 10px;
+            border-bottom: 1px solid rgba(244,236,217,0.16);
+        }
+        .lore-chapter-chip {
+            flex-shrink: 0; text-align: center; cursor: pointer;
+            border: 1px solid rgba(244,236,217,0.25);
+            border-radius: 8px; padding: 6px 10px;
+            font-size: 11px; color: #f4ecd9; opacity: 0.75;
+            background: rgba(244,236,217,0.05);
+            white-space: nowrap;
+        }
+        .lore-chapter-chip:hover { opacity: 1; background: rgba(244,236,217,0.12); }
+        .lore-chapter-chip.active {
+            opacity: 1; background: rgba(155,120,220,0.28); border-color: #9b78dc; color: #e9defa;
+        }
+        .lore-chapter-date { font-weight: 700; display: block; }
+        .lore-chapter-rounds { display: block; opacity: 0.7; font-size: 10px; }
+        .lore-prose { line-height: 1.6; font-size: 13px; }
+        .lore-prose h3, .lore-prose h4 { font-family: 'Fraunces', serif; margin: 14px 0 6px; }
+        .lore-prose p { margin: 0 0 10px; }
+        .lore-generate-btn { width: 100%; }
+
+        .game-panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(244,236,217,0.16);
+            flex-shrink: 0;
+        }
+        .game-panel-header h3 {
+            margin: 0;
+            font-family: 'Fraunces', 'Segoe UI', serif;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-size: 13px;
+        }
+        .game-panel-header .icon-btn-row { display: flex; gap: 6px; }
+        .icon-btn-sm {
+            width: 26px; height: 26px; border-radius: 6px;
+            border: 1px solid rgba(244,236,217,0.2);
+            background: rgba(244,236,217,0.06);
+            color: #f4ecd9; cursor: pointer; font-size: 13px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .icon-btn-sm:hover { background: rgba(244,236,217,0.16); }
+        .game-panel-body {
+            padding: 12px 14px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .game-panel-footer {
+            padding: 10px 14px 12px;
+            border-top: 1px solid rgba(244,236,217,0.16);
+            flex-shrink: 0;
+        }
+
+        /* Actions panel */
+        .brainstorm-chip {
+            display: inline-block;
+            background: rgba(201,160,92,0.16);
+            border: 1px solid rgba(201,160,92,0.5);
+            color: #ecc96b;
+            border-radius: 14px;
+            padding: 5px 11px;
+            margin: 0 6px 6px 0;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .brainstorm-chip:hover { background: rgba(201,160,92,0.28); }
+        .pending-action-row {
+            display: flex; align-items: flex-start; gap: 8px;
+            background: rgba(244,236,217,0.06);
+            border-radius: 8px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+        }
+        .pending-action-row .pa-text { flex: 1; line-height: 1.4; }
+        .pending-action-row .pa-remove {
+            cursor: pointer; opacity: 0.6; font-size: 13px; flex-shrink: 0;
+        }
+        .pending-action-row .pa-remove:hover { opacity: 1; }
+        textarea.game-input, input.game-input {
+            width: 100%; box-sizing: border-box;
+            background: rgba(244,236,217,0.1);
+            border: 1px solid rgba(244,236,217,0.3);
+            border-radius: 6px;
+            color: #f4ecd9; font-size: 13px;
+            padding: 8px 10px;
+            font-family: inherit;
+            resize: vertical;
+        }
+        textarea.game-input:focus, input.game-input:focus { outline: 2px solid #c9a05c; }
+        .game-btn {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            font-size: 12.5px;
+            border-radius: 6px;
+            border: 1px solid rgba(244,236,217,0.25);
+            padding: 7px 13px;
+            cursor: pointer;
+            background: transparent;
+            color: #f4ecd9;
+        }
+        .game-btn:hover { background: rgba(244,236,217,0.12); }
+        .game-btn.primary { background: #c9a05c; color: #1a0a05; font-weight: 600; border-color: #c9a05c; }
+        .game-btn.primary:hover { background: #d9b06c; }
+        .game-btn.danger { color: #f0a8a0; border-color: rgba(240,168,160,0.4); }
+        .game-btn:disabled { opacity: 0.5; cursor: default; }
+        .game-btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .empty-hint { opacity: 0.55; font-size: 12.5px; padding: 6px 0; }
+
+        /* Advisor panel */
+        .advisor-suggestion {
+            display: block; width: 100%; text-align: left;
+            background: rgba(155,120,220,0.14);
+            border: 1px solid rgba(155,120,220,0.4);
+            color: #d7c6f5;
+            border-radius: 8px;
+            padding: 7px 10px;
+            margin-bottom: 6px;
+            font-size: 12.5px;
+            cursor: pointer;
+        }
+        .advisor-suggestion:hover { background: rgba(155,120,220,0.24); }
+        .chat-msg { margin-bottom: 10px; line-height: 1.4; }
+        .chat-msg .chat-msg-sender { font-weight: 700; font-size: 11.5px; opacity: 0.7; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .chat-msg.from-player .chat-msg-sender { color: #ecc96b; }
+        .chat-msg.from-other .chat-msg-sender { color: #8fb0d9; }
+        .chat-msg.from-advisor .chat-msg-sender { color: #d7c6f5; }
+
+        /* Rich text rendering for AI advisor/lore responses (a small markdown-lite
+           subset: ## / ### headers, **bold**, "- " bullet lists — see
+           renderRichText() in game.js). Plain chat/action text still uses
+           textContent elsewhere, so this only applies where explicitly opted in. */
+        .rich-text h3, .rich-text h4 { font-family: 'Fraunces', serif; margin: 10px 0 4px; line-height: 1.3; }
+        .rich-text h3 { font-size: 15px; }
+        .rich-text h4 { font-size: 13.5px; }
+        .rich-text p { margin: 0 0 8px; }
+        .rich-text ul { margin: 0 0 8px; padding-left: 18px; }
+        .rich-text li { margin-bottom: 3px; }
+        .rich-text strong { color: #f4ecd9; }
+
+        /* Inline map-snapshot embed inside an advisor response */
+        .advisor-map-snapshot {
+            background: rgba(244,236,217,0.05);
+            border: 1px solid rgba(244,236,217,0.16);
+            border-radius: 10px;
+            padding: 10px;
+            margin: 8px 0;
+        }
+        .advisor-map-snapshot-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+        .advisor-map-snapshot svg { width: 100%; height: auto; display: block; border-radius: 6px; }
+        .advisor-map-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 11px; }
+        .advisor-map-legend-item { display: flex; align-items: center; gap: 5px; opacity: 0.9; }
+        .advisor-map-legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(244,236,217,0.3); }
+        .advisor-map-snapshot-caption { font-size: 10.5px; opacity: 0.55; font-style: italic; margin-top: 6px; }
+
+        /* Search panel */
+        .search-result-row {
+            padding: 7px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 3px;
+        }
+        .search-result-row:hover { background: rgba(244,236,217,0.1); }
+        .search-result-row .sr-name { font-weight: 600; }
+        .search-result-row .sr-meta { font-size: 11px; opacity: 0.6; }
+
+        /* Chat: nation picker */
+        .nation-pick-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 4px; border-radius: 6px; cursor: pointer;
+        }
+        .nation-pick-row:hover { background: rgba(244,236,217,0.08); }
+        .nation-pick-row input { flex-shrink: 0; }
+
+        /* Chat: nation picker (flag grid) */
+        .country-picker-selected-header { font-weight: 700; font-size: 13px; }
+        .country-picker-selected-list { font-size: 11.5px; opacity: 0.65; margin-bottom: 8px; }
+        .country-flag-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .country-flag-card {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            background: rgba(244,236,217,0.05);
+            border: 1.5px solid rgba(244,236,217,0.12);
+            border-radius: 10px;
+            padding: 10px 6px;
+            cursor: pointer;
+            font-family: inherit;
+            color: inherit;
+        }
+        .country-flag-card:hover { background: rgba(244,236,217,0.1); }
+        .country-flag-card.selected { border-color: #c9a05c; background: rgba(201,160,92,0.16); }
+        .country-flag-img, .country-flag-badge {
+            width: 44px; height: 44px; border-radius: 50%;
+            border: 2px solid rgba(244,236,217,0.25);
+            flex-shrink: 0;
+        }
+        .country-flag-img { object-fit: cover; }
+        .country-flag-badge {
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 12px; color: #1a0a05; text-transform: uppercase;
+        }
+        .country-flag-name { font-size: 11.5px; font-weight: 600; text-align: center; line-height: 1.2; }
+        .chat-thread-row {
+            padding: 8px 10px; border-radius: 8px; cursor: pointer;
+            background: rgba(244,236,217,0.05);
+            margin-bottom: 6px;
+        }
+        .chat-thread-row:hover { background: rgba(244,236,217,0.12); }
+        .chat-thread-row .ctr-title { font-weight: 600; }
+        .chat-thread-row .ctr-preview { font-size: 11.5px; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Timeline (Jump Forward) + Events-between-dates — bigger centered modals */
+        .big-modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(4,10,22,0.6);
+            z-index: 2500;
+            display: none;
+            align-items: center; justify-content: center;
+        }
+        .big-modal-overlay.open { display: flex; }
+        .big-modal-card {
+            width: 460px; max-height: 80vh;
+            background: rgba(8, 18, 40, 0.98);
+            border: 1px solid rgba(244,236,217,0.22);
+            border-radius: 14px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            color: #f4ecd9;
+            display: flex; flex-direction: column;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+        .big-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 18px; border-bottom: 1px solid rgba(244,236,217,0.16);
+        }
+        .big-modal-header h2 {
+            margin: 0; font-family: 'Fraunces', 'Segoe UI', serif; font-weight: 700; font-size: 18px;
+        }
+        .big-modal-header .sub { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+        .big-modal-body { padding: 16px 18px; overflow-y: auto; flex: 1; }
+        .big-modal-close {
+            width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(244,236,217,0.2);
+            background: rgba(244,236,217,0.06); color: #f4ecd9; cursor: pointer;
+        }
+        .big-modal-close:hover { background: rgba(244,236,217,0.16); }
+
+        .timeline-track { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0; }
+        .timeline-major-btn {
+            background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+            border: 1px solid #a78bfa;
+            color: #fff; font-weight: 700; font-size: 14px;
+            border-radius: 10px; padding: 14px 20px; cursor: pointer; width: 100%;
+        }
+        .timeline-major-btn:hover { filter: brightness(1.1); }
+        .timeline-or { opacity: 0.55; font-size: 12px; }
+        .timeline-now-node {
+            width: 90px; height: 90px; border-radius: 50%;
+            border: 2px solid #a78bfa;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #a78bfa; font-weight: 700; font-size: 11px; text-align: center;
+        }
+        .timeline-connector { width: 2px; height: 18px; background: #7c3aed; }
+        .timeline-option-btn {
+            border: 1px solid #a78bfa; color: #e9d8fd; background: rgba(139,92,246,0.12);
+            border-radius: 8px; padding: 10px 16px; cursor: pointer; width: 220px;
+            text-align: center; font-size: 13px;
+        }
+        .timeline-option-btn:hover { background: rgba(139,92,246,0.28); }
+        .timeline-option-btn .tob-date { font-weight: 700; }
+        .timeline-option-btn .tob-label { font-size: 11px; opacity: 0.75; }
+        .timeline-custom-row { display: flex; gap: 8px; width: 220px; align-items: center; }
+
+        /* Events between dates */
+        .event-card {
+            background: rgba(244,236,217,0.05);
+            border: 1px solid rgba(244,236,217,0.14);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+        .event-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .event-date-chip {
+            background: rgba(244,236,217,0.1); border-radius: 14px; padding: 5px 11px;
+            font-size: 12px; display: flex; align-items: center; gap: 6px;
+        }
+        .map-change-chip {
+            background: rgba(99,140,220,0.18); border: 1px solid rgba(99,140,220,0.5);
+            color: #a9c4ec; border-radius: 12px; padding: 4px 10px; font-size: 11.5px;
+            cursor: pointer;
+        }
+        .event-tag-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(244,236,217,0.08);
+            border: 1px solid rgba(244,236,217,0.18);
+            border-radius: 12px; padding: 3px 10px; font-size: 11.5px;
+            margin: 6px 6px 0 0;
+        }
+        .event-tag-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .event-headline { font-family: 'Fraunces', 'Segoe UI', serif; font-weight: 700; font-size: 14.5px; margin: 10px 0 6px; letter-spacing: 0.02em; }
+        .event-body { line-height: 1.5; font-size: 13px; }
+        .view-map-changes-toggle {
+            margin-top: 8px; font-size: 12px; opacity: 0.75; cursor: pointer; display: flex; align-items: center; gap: 5px;
+        }
+        .map-changes-list { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(244,236,217,0.15); display: none; }
+        .map-changes-list.open { display: block; }
+        .map-change-line { font-size: 12px; padding: 3px 0; opacity: 0.85; }
+        .events-footer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+        .ai-config-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(244,236,217,0.16); }
+        .ai-config-section label { display: block; font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
+        .ai-config-section select, .ai-config-section input[type="text"], .ai-config-section input[type="password"] {
+            width: 100%; box-sizing: border-box; margin-bottom: 10px;
+            background: rgba(244,236,217,0.1); border: 1px solid rgba(244,236,217,0.3);
+            border-radius: 6px; color: #f4ecd9; font-size: 12.5px; padding: 7px 9px;
+            color-scheme: dark;
+        }
+        /* Belt-and-suspenders: explicitly color the option list itself, since
+           color-scheme alone isn't honored by every browser/OS combination. */
+        .ai-config-section select option {
+            background-color: #1b1710;
+            color: #f4ecd9;
+        }
+        .ai-status-line { font-size: 11.5px; opacity: 0.7; margin-top: 4px; white-space: pre-line; }
+
+        /* Map Feature click popup — a real Leaflet popup anchored to the clicked
+           lat/lon (see openFeatureInfoModal()/buildFeaturePopupContent() below),
+           not a full-screen modal, so it stays pinned to that map point while
+           panning/zooming and shows the little pointer tip toward it. */
+        .leaflet-popup.feature-popup .leaflet-popup-content-wrapper {
+            background: rgba(8,14,24,0.97);
+            color: #f4ecd9;
+            border-radius: 10px;
+            padding: 0;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.5);
+        }
+        .leaflet-popup.feature-popup .leaflet-popup-content { margin: 0; }
+        .leaflet-popup.feature-popup .leaflet-popup-tip { background: rgba(8,14,24,0.97); }
+        .leaflet-popup.feature-popup .leaflet-popup-close-button { display: none; }
+        .feature-popup-inner {
+            width: 210px;
+            transform-origin: bottom center;
+        }
+        .feature-popup-flag {
+            width: 100%; height: 105px; object-fit: cover; display: block;
+            border-radius: 10px 10px 0 0;
+        }
+        .feature-popup-flag-badge {
+            width: 100%; height: 105px; display: flex; align-items: center; justify-content: center;
+            font-size: 26px; font-weight: 700; color: #1a0a05; text-transform: uppercase;
+            border-radius: 10px 10px 0 0;
+        }
+        .feature-popup-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; padding: 9px 10px;
+        }
+        .feature-popup-row + .feature-popup-row { border-top: 1px solid rgba(244,236,217,0.12); }
+        .feature-popup-row-main {
+            display: flex; align-items: center; gap: 8px; min-width: 0;
+        }
+        .feature-popup-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+            border: 1px solid rgba(244,236,217,0.35);
+        }
+        .feature-popup-row-name {
+            font-weight: 700; font-size: 13px; line-height: 1.25;
+        }
+        .feature-popup-row-actions { display: flex; gap: 2px; flex-shrink: 0; }
+        .feature-popup-icon-btn {
+            width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; opacity: 0.65; background: none; border: none;
+            color: inherit; font-size: 13px; padding: 0;
+        }
+        .feature-popup-icon-btn:hover { opacity: 1; background: rgba(244,236,217,0.12); }
+        .feature-popup-remove-row { padding: 0 10px 10px; }
+        .feature-popup-remove-btn {
+            width: 100%; padding: 6px 0; border-radius: 6px; font-size: 12px;
+            background: none; border: 1px solid rgba(240,168,160,0.4); color: #f0a8a0;
+            cursor: pointer;
+        }
+        .feature-popup-remove-btn:hover { background: rgba(240,168,160,0.12); }
+        .loading-dots::after { content: '...'; animation: loadingDots 1.2s steps(4,end) infinite; }
+        @keyframes loadingDots { 0%,20% { content:''; } 40% { content:'.'; } 60% { content:'..'; } 80%,100% { content:'...'; } }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="spinner"></div>
+        <div id="loader-text">Initializing Game Engine and Loading Topography Data...</div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Dev/perf HUD: live FPS + exact map zoom level, so rendering thresholds
+         (city icons, labels, municipality layer, etc) can be tuned against a
+         precise number instead of guessing "zoomed in some amount". -->
+    <div id="debug-hud">
+        <span id="debug-fps">-- FPS</span>
+        <span id="debug-zoom">zoom --</span>
+    </div>
+
+    <button id="settings-toggle" class="settings-toggle-btn" title="Map &amp; Display Settings">&#9881;</button>
+    <button id="add-unit-toggle" class="settings-toggle-btn" style="right:62px;" title="Place a military unit">&#9876;</button>
+    <div id="settings-panel" class="settings-panel">
+        <div class="settings-header">Map &amp; Display</div>
+        <div class="settings-row">
+            <label for="fullscreen-toggle">Fullscreen</label>
+            <button id="fullscreen-toggle" class="toggle-switch" aria-pressed="false">
+                <span class="toggle-knob"></span>
+            </button>
+        </div>
+        <div class="settings-row slider-row">
+            <label for="zoom-sensitivity"><span>Zoom Sensitivity</span></label>
+            <input type="range" id="zoom-sensitivity" min="1" max="10" step="1" value="5">
+        </div>
+        <div class="settings-row slider-row">
+            <label for="border-size"><span>Border Size</span></label>
+            <input type="range" id="border-size" min="0.25" max="3" step="0.05" value="1">
+        </div>
+        <div class="settings-row slider-row">
+            <label for="feature-size-relative"><span>Feature Size (Relative)</span></label>
+            <input type="range" id="feature-size-relative" min="0.25" max="3" step="0.05" value="1">
+        </div>
+        <div class="settings-row slider-row">
+            <label for="feature-size-absolute"><span>Feature Size (Absolute)</span></label>
+            <input type="range" id="feature-size-absolute" min="0.25" max="3" step="0.05" value="1">
+        </div>
+
+        <div class="ai-config-section">
+            <div class="settings-header" style="margin-bottom:10px;">Game &amp; AI Setup</div>
+            <label for="player-country-select">Your Nation</label>
+            <select id="player-country-select"></select>
+
+            <button type="button" id="new-game-btn" class="game-btn" style="margin-top:10px; width:100%;">Start New Game</button>
+            <div style="font-size:11px; opacity:0.65; margin-top:4px; line-height:1.4;">
+                Clears the current save (history, chats, map changes, advisor messages) and starts over.
+                Your AI provider/key settings are kept.
+            </div>
+
+            <label for="ai-provider-select">AI Provider</label>
+            <select id="ai-provider-select">
+                <option value="anthropic">Anthropic (Claude API)</option>
+                <option value="openai-compatible">OpenAI-compatible (OpenAI, Ollama, LM Studio, local, custom...)</option>
+            </select>
+
+            <label for="ai-base-url">Base URL <span style="opacity:0.6;">(blank = provider default)</span></label>
+            <input type="text" id="ai-base-url" placeholder="e.g. http://localhost:11434/v1">
+
+            <label for="ai-api-key">API Key <span style="opacity:0.6;">(often blank for local servers)</span></label>
+            <input type="password" id="ai-api-key" placeholder="sk-...">
+
+            <label for="ai-model">Model</label>
+            <input type="text" id="ai-model" placeholder="e.g. claude-sonnet-4-5, gpt-4o-mini, llama3.1">
+
+            <button type="button" id="ai-test-btn" class="game-btn" style="width:100%;">Test Connection</button>
+            <div class="ai-status-line" id="ai-config-status">Stored only in this browser's local storage — sent directly from your browser to the provider you choose.</div>
+        </div>
+    </div>
+
+    <div id="unit-name-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h3>Name This Unit</h3>
+            <input type="text" id="unit-name-input" maxlength="60">
+            <div class="modal-actions">
+                <button type="button" id="unit-name-cancel" class="modal-cancel-btn">Cancel</button>
+                <button type="button" id="unit-name-confirm" class="modal-confirm-btn">Place Unit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic themed confirm modal, reused anywhere a destructive action (like
+         clearing advisor history) needs a yes/no rather than window.confirm(). -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="confirm-modal-title">Are you sure?</h3>
+            <p id="confirm-modal-body" style="font-size:13px; opacity:0.85; margin: -6px 0 14px; white-space: pre-line;"></p>
+            <div class="modal-actions">
+                <button type="button" id="confirm-modal-cancel" class="modal-cancel-btn">Cancel</button>
+                <button type="button" id="confirm-modal-confirm" class="modal-confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Persistent top-center date/round indicator. Left chevron pages backward
+         through already-simulated history (opens Events-between-dates); right
+         chevron either pages forward through history, or — once caught up to the
+         present — opens the Jump Forward timeline chooser. -->
+    <div id="date-pill">
+        <button id="date-pill-back" title="View previous events">&#8249;</button>
+        <div>
+            <div class="date-pill-round" id="date-pill-round">Round 150</div>
+            <div class="date-pill-text" id="date-pill-text">February 23rd, 2059</div>
+        </div>
+        <button id="date-pill-forward" title="Jump forward">&#187;</button>
+    </div>
+
+    <!-- Bottom-left: Chat launcher -->
+    <!-- Bottom-left cluster: Actions, Chat -->
+    <div id="left-cluster">
+        <button id="actions-launcher" class="corner-icon-btn" title="Actions">&#9889;</button>
+        <button id="chat-launcher" class="corner-icon-btn" title="Chats">&#128172;</button>
+    </div>
+
+    <!-- Bottom-right cluster: Advisor, Search -->
+    <div id="actions-cluster">
+        <button id="search-launcher" class="corner-icon-btn" title="Search">&#128269;</button>
+        <button id="advisor-launcher" class="corner-icon-btn player-color-ring" title="Advisor">&#127988;</button>
+    </div>
+
+    <!-- Actions panel -->
+    <div id="actions-panel" class="game-panel">
+        <div class="game-panel-header">
+            <h3>Actions</h3>
+            <div class="icon-btn-row">
+                <button type="button" id="actions-close" class="icon-btn-sm">&#10005;</button>
+            </div>
+        </div>
+        <div class="game-panel-body">
+            <div id="pending-actions-list"></div>
+            <div class="empty-hint" id="pending-actions-empty">No actions queued yet for this turn.</div>
+        </div>
+        <div class="game-panel-footer">
+            <div id="brainstorm-chips"></div>
+            <textarea id="action-input" class="game-input" rows="3" placeholder="We start building military bases in Scotland..."></textarea>
+            <div class="game-btn-row">
+                <button type="button" id="action-add-btn" class="game-btn primary">Add Action</button>
+                <button type="button" id="action-enhance-btn" class="game-btn">Enhance</button>
+                <button type="button" id="action-brainstorm-btn" class="game-btn">Brainstorm</button>
+                <button type="button" id="action-brainstorm-clear-btn" class="game-btn" title="Clear brainstorm ideas">&#10005;</button>
+            </div>
+            <div class="ai-status-line" id="actions-status"></div>
+        </div>
+    </div>
+
+    <!-- Advisor & Lore panel — a shared left icon rail switches between the two
+         sub-views without closing the panel, matching the reference screenshots. -->
+    <div id="advisor-panel" class="game-panel game-panel-railed">
+        <div class="panel-icon-rail">
+            <button type="button" id="advisor-tab-btn" class="rail-icon-btn active" title="Advisor">&#128100;</button>
+            <button type="button" id="lore-tab-btn" class="rail-icon-btn" title="Lore">&#128220;</button>
+        </div>
+        <div class="panel-main-col">
+            <div id="advisor-view" class="panel-subview">
+                <div class="game-panel-header">
+                    <h3>Advisor</h3>
+                    <div class="icon-btn-row">
+                        <button type="button" id="advisor-clear" class="icon-btn-sm" title="Clear history permanently">&#128465;</button>
+                        <button type="button" id="advisor-close" class="icon-btn-sm">&#10005;</button>
+                    </div>
+                </div>
+                <div class="game-panel-body" id="advisor-messages">
+                    <div class="empty-hint">Ask your advisor for guidance on foreign policy, domestic affairs, or what's happening in the world.</div>
+                </div>
+                <div class="game-panel-footer">
+                    <div id="advisor-suggestions"></div>
+                    <textarea id="advisor-input" class="game-input" rows="2" placeholder="Ask your advisor..."></textarea>
+                    <div class="game-btn-row">
+                        <button type="button" id="advisor-send-btn" class="game-btn primary">Ask</button>
+                    </div>
+                    <div class="ai-status-line" id="advisor-status"></div>
+                </div>
+            </div>
+            <div id="lore-view" class="panel-subview" style="display:none;">
+                <div class="game-panel-header">
+                    <h3>Lore</h3>
+                    <div class="icon-btn-row">
+                        <button type="button" id="lore-close" class="icon-btn-sm">&#10005;</button>
+                    </div>
+                </div>
+                <div class="game-panel-body" id="lore-body">
+                    <div class="lore-timeline-track" id="lore-timeline-track"></div>
+                    <div id="lore-chapter-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search panel -->
+    <div id="search-panel" class="game-panel">
+        <div class="game-panel-header">
+            <h3>Search</h3>
+            <div class="icon-btn-row">
+                <button type="button" id="search-close" class="icon-btn-sm">&#10005;</button>
+            </div>
+        </div>
+        <div class="game-panel-body">
+            <input type="text" id="search-input" class="game-input" placeholder="Search provinces, cities, countries...">
+            <div id="search-results" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <!-- Chat panel -->
+    <div id="chat-panel" class="game-panel">
+        <div class="game-panel-header">
+            <h3 id="chat-panel-title">Chats</h3>
+            <div class="icon-btn-row">
+                <button type="button" id="chat-back-btn" class="icon-btn-sm" style="display:none;" title="Back to chat list">&#8249;</button>
+                <button type="button" id="chat-close" class="icon-btn-sm">&#10005;</button>
+            </div>
+        </div>
+        <div class="game-panel-body" id="chat-panel-body"></div>
+        <div class="game-panel-footer" id="chat-panel-footer"></div>
+    </div>
+
+    <!-- Country Details panel — opened via the (i) button on a country row in
+         the Map Feature popup (see openCountryDetailPanel() in game.js). -->
+    <div id="country-detail-panel" class="game-panel">
+        <div class="game-panel-header">
+            <div class="country-detail-header-main">
+                <div id="country-detail-flag-wrap" class="country-detail-flag-wrap"></div>
+                <h3 id="country-detail-name">Country</h3>
+            </div>
+            <div class="icon-btn-row">
+                <button type="button" id="country-detail-close" class="icon-btn-sm">&#10005;</button>
+            </div>
+        </div>
+        <div class="game-panel-body">
+            <div class="country-detail-section-title-row">
+                <span class="country-detail-section-title">Related Events</span>
+                <span class="country-detail-events-count" id="country-detail-events-count">0 shown</span>
+            </div>
+            <div class="related-events-toolbar">
+                <input type="text" id="country-detail-search" class="game-input" placeholder="Search events...">
+                <button type="button" id="country-detail-filter-btn" class="game-btn" title="Show only events with map changes">Filters</button>
+            </div>
+            <div id="country-detail-events-list" class="country-detail-events-list"></div>
+
+            <div id="country-detail-status-wrap" style="display:none;">
+                <div class="country-detail-section-title-row" style="margin-top:18px;">
+                    <span class="country-detail-section-title">Status</span>
+                </div>
+                <div id="country-detail-status-note" class="country-detail-status-note"></div>
+            </div>
+
+            <div class="country-detail-section-title-row" style="margin-top:18px;">
+                <span class="country-detail-section-title">Details</span>
+            </div>
+            <div class="detail-columns">
+                <div class="detail-column">
+                    <div class="detail-column-title">Alternative Names</div>
+                    <div id="country-detail-altnames" class="detail-pill-wrap"></div>
+                </div>
+                <div class="detail-column">
+                    <div class="detail-column-title" id="country-detail-regions-count">Regions Owned (0)</div>
+                    <div id="country-detail-regions" class="detail-pill-wrap"></div>
+                </div>
+            </div>
+        </div>
+        <div class="game-panel-footer">
+            <div class="game-btn-row">
+                <button type="button" id="country-detail-advisor-btn" class="game-btn" style="flex:1;">Advisor Report</button>
+                <button type="button" id="country-detail-diplomacy-btn" class="game-btn primary" style="flex:1;">Open Diplomacy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Jump Forward / Timeline modal -->
+    <div id="timeline-modal" class="big-modal-overlay">
+        <div class="big-modal-card">
+            <div class="big-modal-header">
+                <div>
+                    <h2>Jump Forward</h2>
+                    <div class="sub">Simulate Future Events</div>
+                </div>
+                <button type="button" id="timeline-close" class="big-modal-close">&#10005;</button>
+            </div>
+            <div class="big-modal-body">
+                <div class="timeline-track" id="timeline-track"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events-between-dates modal -->
+    <div id="events-modal" class="big-modal-overlay">
+        <div class="big-modal-card" style="width:560px;">
+            <div class="big-modal-header">
+                <div>
+                    <h2>Events Between Dates</h2>
+                    <div class="sub" id="events-modal-range"></div>
+                </div>
+                <button type="button" id="events-close" class="big-modal-close">&#10005;</button>
+            </div>
+            <div class="big-modal-body" id="events-modal-body"></div>
+            <div class="game-panel-footer events-footer-row">
+                <button type="button" id="events-prev-round" class="game-btn">&#8249; Previous</button>
+                <button type="button" id="events-save-btn" class="game-btn">Save</button>
+                <button type="button" id="events-jump-btn" class="game-btn primary">Jump Forward &#187;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simulating overlay, shown while an AI request is in flight for Jump Forward -->
+    <div id="simulating-overlay" class="big-modal-overlay">
+        <div class="big-modal-card" style="width:340px; align-items:center; text-align:center; padding: 30px 10px;">
+            <div class="spinner" style="margin: 0 auto 16px;"></div>
+            <div style="font-family:'Fraunces',serif; font-weight:700; letter-spacing:0.04em;">SIMULATING<span class="loading-dots"></span></div>
+            <div style="font-size:12px; opacity:0.65; margin-top:6px;">The AI is resolving your actions and diplomacy</div>
+        </div>
+    </div>
+
+    <!-- The "Map Feature" popup (shown when a city/unit marker, or the bare map,
+         is clicked) is no longer a static overlay here — it's a real Leaflet
+         popup built and opened dynamically at the clicked lat/lon by
+         openFeatureInfoModal()/buildFeaturePopupContent() below, so it stays
+         anchored to that map point through panning and zooming. -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+    <!-- Adds presimplify()/simplify()/quantile() onto the SAME `topojson` global
+         topojson-client above already exports (this is how the topojson-* family
+         of packages is designed to be combined) — used once at load time in
+         loadMapData() to cut the vertex count of the raw 49k-shape ADM2 dataset
+         before anything ever gets merged/rendered from it. See the comment there
+         for why this is the real fix for ongoing pan/zoom lag (as opposed to the
+         canvas padding tweak, which only addressed a visual seam artifact). -->
+    <script src="https://unpkg.com/topojson-simplify@3"></script>
+    <!-- Versioned query string busts the browser's aggressive script cache during
+         local dev (a plain <script src="game.js"> can keep re-running a stale
+         cached copy after edits, with no visible error) — bump this whenever
+         game.js changes. -->
+    <script src="game.js?v=20"></script>
+
+    <script>
+        // Global engine configuration parameters
+        const ZOOM_THRESHOLD = 6;
+        // Bump this whenever cities.json's contents change, to bust the browser's
+        // HTTP cache for that fetch (see loadMapData()).
+        const CITIES_DATA_VERSION = 2;
+        // Same idea for country_lookup.json (bump whenever its contents change).
+        const COUNTRY_LOOKUP_DATA_VERSION = 3;
+        // Same idea for custom_geo.json (bump whenever its contents change — e.g.
+        // the West Bank Area A/B/C split added DIS019A/DIS019C in place of DIS019).
+        const CUSTOM_GEO_DATA_VERSION = 1;
+        // Same idea for world_regions.json (bump whenever its contents change).
+        const WORLD_REGIONS_DATA_VERSION = 1;
+        let countryLookup = {};
+        let map, municipalityLayer, countryLayer;
+        let lastZoomAboveThreshold = null; // tracks whether we were already above/below threshold, to skip redundant restyles
+
+        // Raw TopoJSON topology + the ADM2 geometry collection, kept around (not just
+        // local to loadMapData) so rebuildCountryLayers() can re-dissolve country
+        // borders on demand — e.g. after the AI applies a map change — without
+        // re-fetching/re-parsing the ~15MB custom_geo.json a second time.
+        let topology = null;
+        let targetObject = null;
+        // Hoisted (not local to loadMapData) so the marker-click "Map Feature" popup
+        // can point-in-polygon test against it to find which municipality a clicked
+        // city/unit sits inside, without re-deriving GeoJSON from the topology.
+        let municipalityGeoJSON = null;
+
+        // Per-province ownership OVERRIDES (shapeID -> ISO3 country code), layered on
+        // top of each municipality's original shapeGroup. This is how AI-driven "map
+        // changes" (territory transferred between countries via Actions/Chat/Jump
+        // Forward) actually take effect: nothing in custom_geo.json itself is ever
+        // edited, we just consult this map first everywhere a feature's owning
+        // country is decided (fill color, tooltip, country-border dissolve grouping).
+        // Persisted as part of the overall game save (see game.js).
+        let provinceOwnerOverrides = {};
+        // Era-preset entity colors (era_*.json's entities.<CODE>.color), set by
+        // game.js's maybeApplyEraOverrides() and read by getCountryColor() below.
+        // Must exist BEFORE game.js runs — its `if (ent.color && window.ERA_COLOR_OVERRIDES)`
+        // check silently no-ops without this, which is why era colors (German
+        // Reich, Bohemia-Moravia, Soviet Union, etc.) never painted here even
+        // though province ownership itself was already computed correctly.
+        window.ERA_COLOR_OVERRIDES = window.ERA_COLOR_OVERRIDES || {};
+        // Cached reference to the dissolved per-country GeoJSON that
+        // rebuildCountryLayers() already computes on load and after every map
+        // change. Reused (not recomputed) by buildCountrySnapshotSVG() below, so
+        // an Advisor reply embedding a mini map doesn't re-merge ~49k municipality
+        // shapes on every request.
+        let countryMergedGeoCache = null;
+        // shapeID -> the specific Leaflet layer object for that municipality, built
+        // once in onEachMunicipality, so a map change can restyle/re-tooltip just the
+        // handful of affected provinces directly instead of looping all ~49k layers.
+        const provinceLayerById = {};
+
+        function getEffectiveCountry(shapeID, originalShapeGroup) {
+            return provinceOwnerOverrides[shapeID] || originalShapeGroup;
+        }
+
+        // ---- Point-in-polygon lookup, used by the "Map Feature" click popup to find
+        // which municipality/province (and therefore which country, honoring any
+        // ownership overrides) a clicked city/unit marker sits inside. ---------------
+        function pointInRing(lon, lat, ring) {
+            let inside = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0], yi = ring[i][1];
+                const xj = ring[j][0], yj = ring[j][1];
+                const intersects = ((yi > lat) !== (yj > lat)) &&
+                    (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+                if (intersects) inside = !inside;
+            }
+            return inside;
+        }
+        function pointInPolygonGeom(lon, lat, geometry) {
+            if (!geometry) return false;
+            if (geometry.type === 'Polygon') {
+                if (!pointInRing(lon, lat, geometry.coordinates[0])) return false;
+                for (let k = 1; k < geometry.coordinates.length; k++) {
+                    if (pointInRing(lon, lat, geometry.coordinates[k])) return false; // inside a hole
+                }
+                return true;
+            }
+            if (geometry.type === 'MultiPolygon') {
+                return geometry.coordinates.some(function(poly) {
+                    return pointInPolygonGeom(lon, lat, { type: 'Polygon', coordinates: poly });
+                });
+            }
+            return false;
+        }
+        // Returns { countryCode, provinceName } for the municipality containing
+        // (lon, lat), or null if none matched (e.g. a point just offshore).
+        function findLocationInfo(lon, lat) {
+            if (!municipalityGeoJSON) return null;
+            const feats = municipalityGeoJSON.features;
+            for (let i = 0; i < feats.length; i++) {
+                const f = feats[i];
+                if (pointInPolygonGeom(lon, lat, f.geometry)) {
+                    return {
+                        countryCode: getEffectiveCountry(f.properties.shapeID, f.properties.shapeGroup),
+                        provinceName: f.properties.shapeName,
+                        shapeID: f.properties.shapeID
+                    };
+                }
+            }
+            return null;
+        }
+
+        // Shared by both the initial load and rebuildCountryLayers(): how many
+        // side-by-side +-360deg "echo" copies of the country/label/feature layers get
+        // rendered for seamless east/west world-wrap scrolling.
+        const WORLD_OFFSETS = [-360, 0, 360];
+
+        // Country name label state.
+        // PERFORMANCE: the expensive part of a country label — tracing its
+        // coastline "spine" and computing its PCA orientation angle (both
+        // O(hundreds of boundary points) per country) — only needs to happen
+        // when country borders themselves actually change (an annexation/
+        // secession, via rebuildCountryLayers()). It does NOT need to be
+        // redone on every zoom/pan. countryLabelsCache holds exactly that:
+        // the per-country/per-landmass geometry (spineLatLngs, clipRingLatLngs,
+        // sizeMetric) computed once by buildCountryLabels(). It starts out
+        // null and is only (re)populated inside rebuildCountryLayers() — see
+        // that function for where it's cleared/rebuilt. Every zoom/pan instead
+        // calls updateLabelLayout(), which reuses this cache and does ONLY
+        // cheap per-frame work: projecting the already-computed spine
+        // LatLngs to screen pixels (map.latLngToLayerPoint) and recomputing
+        // font size/opacity from the current zoom scale — no re-tracing, no
+        // PCA, no re-walking the raw boundary ring.
+        let labelLayerEl;
+        let labelIdCounter = 0;
+        let countryLabelsCache = null; // null until first rebuildCountryLayers() call; then an array of { pathEl, textEl, clipShapeEl, spineLatLngs, clipRingLatLngs, name, sizeMetric }
+        // Bumped every time rebuildCountryLayers() runs (i.e. whenever effective
+        // country ownership of any province could have changed). Lets other
+        // per-marker caches (see the capital star/square capture check in
+        // updateFeatureLayout()) know when a previously-cached "who owns this
+        // point" answer might be stale, without re-checking on every frame.
+        let ownershipEpoch = 0;
+
+        // City / military-unit point-feature state. Rendered on their own SVG overlay
+        // (featureLayerEl), painted above the country-label layer so icons/names never
+        // get swallowed by a big translucent watermark country name behind them.
+        let featureLayerEl;
+        let featureIdCounter = 0;
+        let cities = []; // raw city records loaded from cities.json: {name, lat, lon, country, capital, pop}
+        let units = [];  // player-placed military units: {id, lat, lon, name}
+        // Country code -> { ADM1 region name -> [ADM2 shapeIDs] }, covering every
+        // country worldwide with geoBoundaries ADM1 data available (built by
+        // spatially matching every ADM2 shape's representative point against real
+        // ADM1 (state/province/region) boundaries from geoBoundaries' own CGAZ
+        // ADM1 release — the same source family this project's ADM2 layer already
+        // comes from). Lets the AI declare a whole-region event (a US state
+        // seceding, Catalonia becoming a Spanish protectorate, Aragon breaking
+        // away, etc.) as one small directive instead of having to enumerate every
+        // county/comarca/district itself — see applyRegionChanges() in game.js,
+        // which reads this the same way it already reads
+        // cities/countryLookup/provinceOwnerOverrides (a free variable resolved
+        // through the shared top-level scope both scripts run in, not an
+        // explicit window.* export). ~2% of shapes (mostly disputed territories
+        // and micro-states with no ADM1 subdivision) aren't covered — that's a
+        // real absence of subdivision, not a bug.
+        let worldRegions = {};
+        const cityMarkers = []; // { groupEl, iconEl, textEl, latlng, name, capital, sizeMetric }
+        const unitMarkers = []; // { groupEl, iconEl, textEl, latlng, name, unitId }
+        const UNITS_STORAGE_KEY = 'mappainter1_units_v1';
+        let placingUnit = false;
+
+        // Political fill opacity — lowered from a fully-opaque 0.92 so the real
+        // satellite terrain base layer (mountains, ice, desert/vegetation texture)
+        // shows through the country/province tinting instead of being hidden under
+        // flat solid color.
+        const TERRAIN_FILL_OPACITY = 0.68;
+
+        // Live-adjustable "Map & Display" settings.
+        // borderSize scales every border stroke weight. Feature
+        // Size (Relative/Absolute) control CITY and MILITARY UNIT icon+label size, NOT
+        // country name text (confirmed against reference behavior) — featureSizeRelative
+        // scales how much a city's real population drives its icon/label size, and
+        // featureSizeAbsolute scales the flat baseline every city/unit marker gets
+        // regardless of population. Both knobs feed updateFeatureLayout() directly.
+        // Country-name label sizing is intentionally independent of these two sliders —
+        // see the fixed constants inside updateLabelLayout().
+        const mapSettings = {
+            zoomSensitivity: 5,       // 1 (least sensitive) - 10 (most sensitive)
+            borderSize: 1,
+            featureSizeRelative: 1,
+            featureSizeAbsolute: 1
+        };
+        const BASE_COUNTRY_BORDER_WEIGHT = 2.6;
+        const BASE_MUNICIPALITY_WEIGHT_ZOOMED = 0.6;
+        const BASE_MUNICIPALITY_WEIGHT_UNZOOMED = 0.8;
+        const countryBorderLayers = []; // every WORLD_OFFSETS copy's country-outline layer
+
+        // 1. Curated Atlas Palette + Deterministic Hashing
+        // Brighter, warmer, more saturated "matte pastel" tones — tuned to run noticeably
+        // lighter/warmer than the first pass here (that version leaned too dark/muddy).
+        const PALETTE = [
+            '#5c9770', '#6bab7f', '#9bab5c', '#c2b565', '#c99a5c', '#d4a86a',
+            '#b06b5c', '#c97a5f', '#a888a3', '#7fa0b5', '#5c8a99', '#6ba3a3',
+            '#a08a5c', '#ab9a6b', '#8a6ba0', '#a3809c', '#6ba088', '#87ab87',
+            '#c2895c', '#8a9cab', '#6b7fab', '#a08fab', '#c58a95', '#6bb5b8',
+            '#c2735c', '#d4a35c', '#7a9c5c', '#b8a05c'
+        ];
+
+        // Iconic majors called out by direct screenshot comparison —
+        // worth pinning exactly rather than leaving to the hash, since these are
+        // the largest, most visually dominant countries on the map.
+        const COLOR_OVERRIDES = {
+            'RUS': '#3d6b45', // deep forest green
+            'USA': '#5a8f95', // slate teal-blue
+            'CAN': '#9c6b45', // chocolate brown
+            'BRA': '#4fa06b', // emerald green
+            'MEX': '#6b9c5c', // cactus green
+            'CHN': '#7a2f35', // imperial burgundy
+            'IND': '#c9a05c', // mustard/gold
+            'KAZ': '#6bb5b8', // soft cyan-teal
+            'MNG': '#c2a06b', // tan/khaki
+            'TUR': '#a06b4a', // warm brown
+            'LBY': '#b8a05c', // khaki
+            'TCD': '#a85c45', // terracotta
+            'MLI': '#7a9c5c', // warm green
+            'DZA': '#7a9c5c', // warm green (Algeria)
+            'NER': '#c2a06b', // warm tan
+            'SDN': '#8a7a4a', // olive-brown
+            'JPN': '#8aa0b0', // pale blue-gray
+            'AUS': '#5c9c85', // teal-green
+            'SOML': '#4a7c8c' // steel blue — Somaliland, kept visually distinct from Somalia
+        };
+
+        // Maps a US state's lowercase display name to flagcdn.com's subdivision
+        // flag code (flagcdn supports "us-XX" state flags the same way it supports
+        // country codes — see buildFlagElement() in game.js). Used so a custom
+        // country minted from a seceding US state (e.g. "Pennsylvania", "Texas" —
+        // see getOrCreateCountryCode() in game.js) gets that state's real flag
+        // instead of falling back to a generic colored-initials badge. Exposed on
+        // window since game.js's IIFE can't reach this file's top-level consts
+        // directly (same pattern as window.spawnUnit/window.ISO3_TO_ISO2).
+        const US_STATES_MAP = {
+            "texas": "us-tx", "pennsylvania": "us-pa", "california": "us-ca", "alabama": "us-al",
+            "alaska": "us-ak", "arizona": "us-az", "arkansas": "us-ar", "colorado": "us-co",
+            "connecticut": "us-ct", "delaware": "us-de", "florida": "us-fl", "georgia": "us-ga",
+            "hawaii": "us-hi", "idaho": "us-id", "illinois": "us-il", "indiana": "us-in",
+            "iowa": "us-ia", "kansas": "us-ks", "kentucky": "us-ky", "louisiana": "us-la",
+            "maine": "us-me", "maryland": "us-md", "massachusetts": "us-ma", "michigan": "us-mi",
+            "minnesota": "us-mn", "mississippi": "us-ms", "missouri": "us-mo", "montana": "us-mt",
+            "nebraska": "us-ne", "nevada": "us-nv", "new hampshire": "us-nh", "new jersey": "us-nj",
+            "new mexico": "us-nm", "new york": "us-ny", "north carolina": "us-nc", "north dakota": "us-nd",
+            "ohio": "us-oh", "oklahoma": "us-ok", "oregon": "us-or", "rhode island": "us-ri",
+            "south carolina": "us-sc", "south dakota": "us-sd", "tennessee": "us-tn", "utah": "us-ut",
+            "vermont": "us-vt", "virginia": "us-va", "washington": "us-wa", "west virginia": "us-wv",
+            "wisconsin": "us-wi", "wyoming": "us-wy"
+        };
+        window.US_STATES_MAP = US_STATES_MAP;
+
+        // Generic worldwide state/province/region flag lookup, built the same way
+        // as US_STATES_MAP above but for other countries' first-level subdivisions.
+        // Two kinds of values appear here:
+        //   - a bare "xx-yy" string: served directly by flagcdn.com (which, besides
+        //     full countries, also hosts US states and the 4 UK home nations under
+        //     this same "xx-yy" convention)
+        //   - a "sub:xx-yy" string: NOT on flagcdn — resolved instead via the
+        //     iso3166-flags CDN (github.com/amckenna41/iso3166-flags, served over
+        //     jsDelivr), which hosts ~2,843 official ISO 3166-2 subdivision flags
+        //     for every country. See buildFlagImageUrl() below for how the two are
+        //     told apart and turned into an actual image URL.
+        // Only countries whose codes were verified this session (via direct lookup
+        // against ISO 3166-2, cross-checked against what the CDN actually serves)
+        // are included. More can be appended here later — the "soon I'll give you
+        // alternate flags too" case just means adding more entries to this object.
+        const SUBDIVISION_FLAGS = Object.assign({}, US_STATES_MAP, {
+            // United Kingdom — 4 home nations (flagcdn first-party support)
+            "england": "gb-eng", "scotland": "gb-sct", "wales": "gb-wls", "northern ireland": "gb-nir",
+
+            // Canada — 13 provinces/territories
+            "alberta": "sub:ca-ab", "british columbia": "sub:ca-bc", "manitoba": "sub:ca-mb",
+            "new brunswick": "sub:ca-nb", "newfoundland and labrador": "sub:ca-nl", "nova scotia": "sub:ca-ns",
+            "northwest territories": "sub:ca-nt", "nunavut": "sub:ca-nu", "ontario": "sub:ca-on",
+            "prince edward island": "sub:ca-pe", "quebec": "sub:ca-qc", "saskatchewan": "sub:ca-sk",
+            "yukon": "sub:ca-yt",
+
+            // Australia — 6 states + 2 mainland territories
+            "australian capital territory": "sub:au-act", "new south wales": "sub:au-nsw",
+            "northern territory": "sub:au-nt", "queensland": "sub:au-qld", "south australia": "sub:au-sa",
+            "tasmania": "sub:au-tas", "victoria": "sub:au-vic", "western australia": "sub:au-wa",
+
+            // Brazil — 26 states + federal district
+            "acre": "sub:br-ac", "alagoas": "sub:br-al", "amazonas": "sub:br-am", "amapa": "sub:br-ap",
+            "bahia": "sub:br-ba", "ceara": "sub:br-ce", "distrito federal": "sub:br-df",
+            "espirito santo": "sub:br-es", "goias": "sub:br-go", "maranhao": "sub:br-ma",
+            "minas gerais": "sub:br-mg", "mato grosso do sul": "sub:br-ms", "mato grosso": "sub:br-mt",
+            "para": "sub:br-pa", "paraiba": "sub:br-pb", "pernambuco": "sub:br-pe", "piaui": "sub:br-pi",
+            "parana": "sub:br-pr", "rio de janeiro": "sub:br-rj", "rio grande do norte": "sub:br-rn",
+            "rondonia": "sub:br-ro", "roraima": "sub:br-rr", "rio grande do sul": "sub:br-rs",
+            "santa catarina": "sub:br-sc", "sergipe": "sub:br-se", "sao paulo": "sub:br-sp",
+            "tocantins": "sub:br-to",
+
+            // Germany — 16 states (Bundesländer)
+            "baden-wurttemberg": "sub:de-bw", "bavaria": "sub:de-by", "berlin": "sub:de-be",
+            "brandenburg": "sub:de-bb", "bremen": "sub:de-hb", "hamburg": "sub:de-hh", "hesse": "sub:de-he",
+            "mecklenburg-vorpommern": "sub:de-mv", "lower saxony": "sub:de-ni",
+            "north rhine-westphalia": "sub:de-nw", "rhineland-palatinate": "sub:de-rp",
+            "saarland": "sub:de-sl", "saxony": "sub:de-sn", "saxony-anhalt": "sub:de-st",
+            "schleswig-holstein": "sub:de-sh", "thuringia": "sub:de-th",
+
+            // Switzerland — 26 cantons
+            "aargau": "sub:ch-ag", "appenzell innerrhoden": "sub:ch-ai", "appenzell ausserrhoden": "sub:ch-ar",
+            "bern": "sub:ch-be", "basel-landschaft": "sub:ch-bl", "basel-stadt": "sub:ch-bs",
+            "fribourg": "sub:ch-fr", "geneva": "sub:ch-ge", "glarus": "sub:ch-gl", "graubunden": "sub:ch-gr",
+            "jura": "sub:ch-ju", "lucerne": "sub:ch-lu", "neuchatel": "sub:ch-ne", "nidwalden": "sub:ch-nw",
+            "obwalden": "sub:ch-ow", "st. gallen": "sub:ch-sg", "schaffhausen": "sub:ch-sh",
+            "solothurn": "sub:ch-so", "schwyz": "sub:ch-sz", "thurgau": "sub:ch-tg", "ticino": "sub:ch-ti",
+            "uri": "sub:ch-ur", "vaud": "sub:ch-vd", "valais": "sub:ch-vs", "zug": "sub:ch-zg",
+            "zurich": "sub:ch-zh",
+
+            // Spain — 17 autonomous communities + 2 autonomous cities
+            "andalusia": "sub:es-an", "aragon": "sub:es-ar", "asturias": "sub:es-as",
+            "canary islands": "sub:es-cn", "cantabria": "sub:es-cb", "castile and leon": "sub:es-cl",
+            "castile-la mancha": "sub:es-cm", "catalonia": "sub:es-ct", "ceuta": "sub:es-ce",
+            "extremadura": "sub:es-ex", "galicia": "sub:es-ga", "balearic islands": "sub:es-ib",
+            "la rioja": "sub:es-ri", "madrid": "sub:es-md", "melilla": "sub:es-ml", "murcia": "sub:es-mc",
+            "navarre": "sub:es-nc", "basque country": "sub:es-pv", "valencia": "sub:es-vc",
+
+            // Italy — 20 regions
+            "abruzzo": "sub:it-65", "basilicata": "sub:it-77", "calabria": "sub:it-78",
+            "campania": "sub:it-72", "emilia-romagna": "sub:it-45", "friuli venezia giulia": "sub:it-36",
+            "lazio": "sub:it-62", "liguria": "sub:it-42", "lombardy": "sub:it-25", "marche": "sub:it-57",
+            "molise": "sub:it-67", "piedmont": "sub:it-21", "apulia": "sub:it-75", "sardinia": "sub:it-88",
+            "sicily": "sub:it-82", "tuscany": "sub:it-52", "trentino-south tyrol": "sub:it-32",
+            "umbria": "sub:it-55", "aosta valley": "sub:it-23", "veneto": "sub:it-34",
+
+            // Mexico — 31 states + Mexico City
+            "aguascalientes": "sub:mx-agu", "baja california": "sub:mx-bcn",
+            "baja california sur": "sub:mx-bcs", "campeche": "sub:mx-cam", "chiapas": "sub:mx-chp",
+            "chihuahua": "sub:mx-chh", "mexico city": "sub:mx-cmx", "coahuila": "sub:mx-coa",
+            "colima": "sub:mx-col", "durango": "sub:mx-dur", "guanajuato": "sub:mx-gua",
+            "guerrero": "sub:mx-gro", "hidalgo": "sub:mx-hid", "jalisco": "sub:mx-jal",
+            "michoacan": "sub:mx-mic", "morelos": "sub:mx-mor", "mexico state": "sub:mx-mex",
+            "nayarit": "sub:mx-nay", "nuevo leon": "sub:mx-nle", "oaxaca": "sub:mx-oax",
+            "puebla": "sub:mx-pue", "queretaro": "sub:mx-que", "quintana roo": "sub:mx-roo",
+            "san luis potosi": "sub:mx-slp", "sinaloa": "sub:mx-sin", "sonora": "sub:mx-son",
+            "tabasco": "sub:mx-tab", "tamaulipas": "sub:mx-tam", "tlaxcala": "sub:mx-tla",
+            "veracruz": "sub:mx-ver", "yucatan": "sub:mx-yuc", "zacatecas": "sub:mx-zac",
+
+            // France — 13 modern regions (post-2016 reorganization; Corsica uses its
+            // special-status collectivity code, not a plain department number)
+            "auvergne-rhone-alpes": "sub:fr-ara", "burgundy-franche-comte": "sub:fr-bfc",
+            "brittany": "sub:fr-bre", "centre-val de loire": "sub:fr-cvl", "corsica": "sub:fr-20r",
+            "grand est": "sub:fr-ges", "hauts-de-france": "sub:fr-hdf", "ile-de-france": "sub:fr-idf",
+            "normandy": "sub:fr-nor", "nouvelle-aquitaine": "sub:fr-naq", "occitanie": "sub:fr-occ",
+            "pays de la loire": "sub:fr-pdl", "provence-alpes-cote dazur": "sub:fr-pac"
+        });
+        window.SUBDIVISION_FLAGS = SUBDIVISION_FLAGS;
+
+        // Turns an ISO3_TO_ISO2/SUBDIVISION_FLAGS value into an actual flag image
+        // URL. Values with no "sub:" prefix (plain country codes, US states,
+        // GB home nations) go to flagcdn.com as before; "sub:xx-yy" values are
+        // subdivision codes not covered by flagcdn, so they're resolved against
+        // the iso3166-flags CDN instead (see SUBDIVISION_FLAGS comment above).
+        // widthPx only affects the flagcdn.com path — the CDN path is SVG and
+        // scales freely. Exposed on window so game.js (which builds all the
+        // flag <img> elements) can share this single source of truth instead of
+        // hardcoding the flagcdn URL pattern itself.
+        function buildFlagImageUrl(value, widthPx) {
+            if (typeof value === 'string' && value.indexOf('sub:') === 0) {
+                const bits = value.slice(4).split('-');
+                const countryPart = bits[0].toUpperCase();
+                const subPart = bits.slice(1).join('-').toUpperCase();
+                return 'https://cdn.jsdelivr.net/gh/amckenna41/iso3166-flags@main/iso3166-2-flags/' +
+                    countryPart + '/' + countryPart + '-' + subPart + '.svg';
+            }
+            return 'https://flagcdn.com/w' + (widthPx || 80) + '/' + value + '.png';
+        }
+        window.buildFlagImageUrl = buildFlagImageUrl;
+
+        function hashString(str) {
+            if (!str) return 0;
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return Math.abs(hash);
+        }
+
+        function getCountryColor(shapeGroup) {
+            if (!shapeGroup) return '#8a8a8a';
+            // Era-preset entities (era_*.json's entities.<CODE>.color, e.g. the
+            // German Reich/Bohemia-Moravia/Soviet Union palette) must win over a
+            // country's ordinary modern color, same precedence as
+            // world_map_webgl.html's getCountryColor() — without this check,
+            // maybeApplyEraOverrides() computes the right province ownership but
+            // restyleOverriddenMunicipalities() paints it in each shape's normal
+            // modern/hash color instead, so a historical preset's reassigned
+            // territory (e.g. Austria/Sudetenland under Germany) never visually
+            // reads as having changed hands.
+            if (window.ERA_COLOR_OVERRIDES && window.ERA_COLOR_OVERRIDES[shapeGroup]) return window.ERA_COLOR_OVERRIDES[shapeGroup];
+            if (COLOR_OVERRIDES[shapeGroup]) return COLOR_OVERRIDES[shapeGroup];
+            return PALETTE[hashString(shapeGroup) % PALETTE.length];
+        }
+
+        // Shifts every coordinate in a GeoJSON FeatureCollection by a fixed longitude
+        // offset (e.g. +-360) so the same country geometry can be re-rendered as a
+        // seamless "echo" copy of the world for continuous east/west scrolling.
+        function shiftRingLon(ring, offsetLon) {
+            return ring.map(function(p) { return [p[0] + offsetLon, p[1]]; });
+        }
+        function shiftGeometryLon(geometry, offsetLon) {
+            if (offsetLon === 0) return geometry;
+            if (geometry.type === 'Polygon') {
+                return { type: 'Polygon', coordinates: geometry.coordinates.map(function(r) { return shiftRingLon(r, offsetLon); }) };
+            } else if (geometry.type === 'MultiPolygon') {
+                return {
+                    type: 'MultiPolygon',
+                    coordinates: geometry.coordinates.map(function(poly) {
+                        return poly.map(function(r) { return shiftRingLon(r, offsetLon); });
+                    })
+                };
+            }
+            return geometry;
+        }
+        function shiftFeatureCollection(fc, offsetLon) {
+            if (offsetLon === 0) return fc;
+            return {
+                type: 'FeatureCollection',
+                features: fc.features.map(function(f) {
+                    return {
+                        type: 'Feature',
+                        properties: f.properties,
+                        geometry: shiftGeometryLon(f.geometry, offsetLon)
+                    };
+                })
+            };
+        }
+
+        // 2. Initialize Leaflet Map Engine using HTML Canvas Renderer
+        function initMap() {
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 3,
+                minZoom: 2,
+                maxZoom: 10,
+                // Latitude is still capped (nothing past the poles to show), but longitude
+                // is intentionally unbounded so the map scrolls/wraps continuously east-west
+                // instead of hard-stopping at the antimeridian. worldCopyJump keeps Leaflet's
+                // own internal state sane during that continuous panning; the actual visual
+                // "second copy of the world" comes from deliberately re-rendering the
+                // country layer at +-360deg longitude offsets below.
+                maxBounds: [[-85, -Infinity], [85, Infinity]],
+                maxBoundsViscosity: 0.8,
+                worldCopyJump: true,
+                // Explicit canvas renderer (instead of the bare preferCanvas:true
+                // shorthand) so we can raise its "padding" above Leaflet's default
+                // of 0.1 (10% extra render buffer around the viewport). This is
+                // the actual fix for the "half the screen shows raw satellite
+                // tiles, half shows the painted country layer" artifact during
+                // fast scroll-wheel zooming: with only a thin default buffer, a
+                // fast zoom/pan can expose screen area the canvas hasn't painted
+                // into yet before the next redraw catches up, which reads as a
+                // stale/blank seam. A bigger buffer means more of what a fast zoom
+                // reveals was already pre-rendered, at the cost of more area
+                // touched per redraw — dialed down from an initial 0.6 to 0.3 now
+                // that loadMapData()'s topojson.simplify() pass (see there) has
+                // already cut the underlying per-point redraw cost, so the padding
+                // buffer is cheaper to afford than it was before.
+                renderer: L.canvas({ padding: 0.3 }),
+                attributionControl: true,
+                // Higher wheelPxPerZoomLevel = more scroll pixels needed per zoom level =
+                // LESS sensitive. zoomSensitivityToWheelPx() converts the panel's 1-10
+                // "Zoom Sensitivity" slider (higher number = more sensitive) into this.
+                wheelPxPerZoomLevel: zoomSensitivityToWheelPx(mapSettings.zoomSensitivity)
+            });
+
+            // Real satellite terrain base layer — NASA GIBS Blue Marble (Shaded
+            // Relief + Bathymetry), a free/no-API-key WMTS tile set (Web Mercator,
+            // native up to zoom 8; Leaflet upsamples past that). Added first/beneath
+            // everything else so real coastlines, mountain ranges, ice sheets and
+            // desert/vegetation texture show through the semi-transparent country and
+            // province fills instead of flat placeholder colors.
+            L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg', {
+                maxNativeZoom: 8,
+                maxZoom: 10,
+                minZoom: 2,
+                noWrap: false,
+                attribution: 'Imagery: NASA EOSDIS GIBS / Blue Marble',
+                crossOrigin: true
+            }).addTo(map);
+
+            map.attributionControl.setPrefix(false);
+            map.attributionControl.addAttribution(
+                'Boundary data: <a href="https://www.geoboundaries.org/" target="_blank" rel="noopener">geoBoundaries</a> &middot; Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (ODbL)'
+            );
+
+            // Dedicated absolutely-positioned SVG overlay for country name labels,
+            // layered above the polygon panes but below Leaflet's tooltip pane (650) so
+            // hover tooltips always win. SVG (rather than plain divs) is what lets each
+            // label's text ride a <textPath> that curves with the country's shape.
+            labelLayerEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            labelLayerEl.setAttribute('class', 'country-label-layer');
+            labelLayerEl.style.position = 'absolute';
+            labelLayerEl.style.top = '0';
+            labelLayerEl.style.left = '0';
+            labelLayerEl.style.width = '1px';
+            labelLayerEl.style.height = '1px';
+            labelLayerEl.style.overflow = 'visible';
+            labelLayerEl.style.zIndex = 450;
+            labelLayerEl.style.pointerEvents = 'none';
+            map.getPanes().overlayPane.appendChild(labelLayerEl);
+
+            // Dedicated SVG overlay for city/unit point features, painted above the
+            // country-label layer (so a small legible city marker is never visually
+            // swallowed by a big translucent country-name watermark behind it). Pointer
+            // events stay off at the layer level and get turned on only for individual
+            // unit icons (so a player can click a unit to remove it) without blocking
+            // map drag/zoom everywhere else.
+            featureLayerEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            featureLayerEl.setAttribute('class', 'feature-layer');
+            featureLayerEl.style.position = 'absolute';
+            featureLayerEl.style.top = '0';
+            featureLayerEl.style.left = '0';
+            featureLayerEl.style.width = '1px';
+            featureLayerEl.style.height = '1px';
+            featureLayerEl.style.overflow = 'visible';
+            featureLayerEl.style.zIndex = 460;
+            featureLayerEl.style.pointerEvents = 'none';
+            map.getPanes().overlayPane.appendChild(featureLayerEl);
+
+            // Grain/texture overlay lives outside Leaflet's panes (fixed to the viewport)
+            // so it isn't reprojected/redrawn on every pan or zoom.
+            const texture = document.createElement('div');
+            texture.id = 'texture-overlay';
+            document.getElementById('map').appendChild(texture);
+        }
+
+        // Municipality fill/stroke style, used by loadMapData()'s L.geoJSON call.
+        function municipalityStyleFn(feature) {
+            const currentZoom = map.getZoom();
+            const countryCode = getEffectiveCountry(feature.properties.shapeID, feature.properties.shapeGroup);
+            const fillColor = getCountryColor(countryCode);
+            const zoomedIn = currentZoom >= ZOOM_THRESHOLD;
+            return {
+                fillColor: fillColor,
+                fillOpacity: TERRAIN_FILL_OPACITY,
+                // Province/state borders are always drawn — a dark, low-opacity
+                // line at every zoom level so a player can identify state
+                // boundaries without them competing with the crisp, fully-opaque
+                // national border layer on top. (Previously these were invisible
+                // below ZOOM_THRESHOLD by matching the polygon's own fill color —
+                // that "seam-sealing" trick is still needed for weight>0 to avoid
+                // anti-aliasing gaps between adjacent polygons, so instead of
+                // hiding the line entirely we now stroke with a real dark color at
+                // a low opacity, subtle but always visible.)
+                color: zoomedIn ? '#241f18' : '#161310',
+                weight: (zoomedIn ? BASE_MUNICIPALITY_WEIGHT_ZOOMED : BASE_MUNICIPALITY_WEIGHT_UNZOOMED) * mapSettings.borderSize,
+                opacity: zoomedIn ? 0.5 : 0.32,
+                dashArray: zoomedIn ? '2,3' : null
+            };
+        }
+
+        // 3. Process TopoJSON and Render Game Layers
+        async function loadMapData() {
+            try {
+                // Parallel data ingestion
+                updateLoaderText("Downloading Assets (custom_geo.json & lookup entries)...");
+                // cities.json/country_lookup.json get version query strings because
+                // browsers cache them aggressively (a plain fetch('cities.json') can
+                // silently keep serving a stale cached copy after the file's contents
+                // change on disk, with no visible error) — bump CITIES_DATA_VERSION /
+                // COUNTRY_LOOKUP_DATA_VERSION whenever those files change.
+                const [lookupResponse, topoResponse, riversResponse, citiesResponse, worldRegionsResponse] = await Promise.all([
+                    fetch('country_lookup.json?v=' + COUNTRY_LOOKUP_DATA_VERSION),
+                    fetch('custom_geo.json?v=' + CUSTOM_GEO_DATA_VERSION),
+                    fetch('rivers.json').catch(function() { return null; }),
+                    fetch('cities.json?v=' + CITIES_DATA_VERSION).catch(function() { return null; }),
+                    fetch('world_regions.json?v=' + WORLD_REGIONS_DATA_VERSION).catch(function() { return null; })
+                ]);
+
+                countryLookup = await lookupResponse.json();
+                // Somaliland isn't a distinct shapeGroup in the source geoBoundaries
+                // data (its districts are folded into Somalia's "SOM" group) — it's
+                // split out at the province-override level instead (see
+                // defaultGameState() in game.js), but it still needs an entry here
+                // so its name/color can resolve once that override is applied.
+                if (!countryLookup['SOML']) countryLookup['SOML'] = 'Somaliland';
+                topology = await topoResponse.json();
+                // The actual fix for ongoing pan/zoom lag (not just the visual seam
+                // the canvas-padding tweak addressed): the raw geoBoundaries ADM2
+                // dataset is 49,245 shapes at full survey precision, and every one
+                // of those points has to be re-projected and stroked/filled by
+                // Leaflet's canvas renderer on every pan/zoom frame — for all the
+                // country-border layer, the municipality layer, AND all 3
+                // WORLD_OFFSETS copies of each. Simplifying once here, before
+                // anything is merged or rendered from it, cuts that per-frame cost
+                // directly instead of working around it. presimplify() scores every
+                // arc coordinate by how much removing it would change the shape
+                // (Visvalingam-Whyatt effective area); quantile(topology, 0.3) finds
+                // the score below which the least-significant 30% of points fall;
+                // simplify() then drops everything below that score. Purely a
+                // point-count reduction — doesn't touch which shapes own which
+                // territory, so provinceOwnerOverrides/shapeIDs are unaffected.
+                if (window.topojson && typeof topojson.presimplify === 'function') {
+                    topology = topojson.presimplify(topology);
+                    const minWeight = topojson.quantile(topology, 0.3);
+                    topology = topojson.simplify(topology, minWeight);
+                }
+                // Rivers are optional — OSM-derived (openstreetmapdata.com via the
+                // geo-maps project, ODbL), a simplified 1km-tolerance MultiPolygon of
+                // river corridors. If the file isn't present yet, the map still renders
+                // fine without it.
+                const riversGeoJSON = (riversResponse && riversResponse.ok) ? await riversResponse.json() : null;
+                // Major cities (capitals + large non-capital cities, GeoNames/geonames.org
+                // "cities15000" dump, public domain). Also optional — the map still works
+                // without city markers, they just won't appear.
+                cities = (citiesResponse && citiesResponse.ok) ? await citiesResponse.json() : [];
+                worldRegions = (worldRegionsResponse && worldRegionsResponse.ok) ? await worldRegionsResponse.json() : {};
+                units = loadUnitsFromStorage();
+
+                updateLoaderText("Parsing TopoJSON Geometries...");
+                targetObject = topology.objects.geoBoundariesCGAZ_ADM2;
+
+                // Extract standalone municipality GeoJSON features
+                municipalityGeoJSON = topojson.feature(topology, targetObject);
+
+                // --- RENDERING LEAFLET SECTIONS ---
+                updateLoaderText("Composing Map Layout Layers...");
+
+                // Base Layer: Municipalities (borders hidden at low zoom, dashed subdivision
+                // lines once zoomed past ZOOM_THRESHOLD so they read as internal admin lines
+                // rather than competing with the crisp national border layer above them).
+                // This full-detail layer is only rendered once, at the primary (0deg) world
+                // copy — duplicating all ~49k features at +-360deg too would roughly triple
+                // render/memory cost for detail nobody will realistically be zoomed into
+                // while also panned a full world away.
+                municipalityLayer = L.geoJSON(municipalityGeoJSON, {
+                    style: municipalityStyleFn,
+                    onEachFeature: onEachMunicipality
+                });
+                // PERFORMANCE: only attach the ~49k-feature municipality layer to the
+                // map when already zoomed in past ZOOM_THRESHOLD. Leaflet has to touch
+                // every attached canvas feature on each zoom/pan repaint regardless of
+                // how "invisible" its style makes it look, so merely restyling these
+                // features (the old approach) still paid that full per-feature cost at
+                // world zoom. Actually detaching the layer (map.removeLayer) when
+                // zoomed out — and reattaching it in handleZoomStateChange() once the
+                // player crosses back over ZOOM_THRESHOLD — is what actually removes
+                // that cost. provinceLayerById/tooltips/click handlers are all wired up
+                // above at construction time regardless of map attachment, so nothing
+                // else needs to change when this layer is added/removed later. When
+                // zoomed out, the country-level layer below (rebuildCountryLayers())
+                // fills in with per-country color instead, matching what the world-wrap
+                // "echo" copies already do at every zoom level.
+                if (map.getZoom() >= ZOOM_THRESHOLD) {
+                    municipalityLayer.addTo(map);
+                }
+
+                // River corridors, drawn over land but under the crisp national border
+                // layer added next. Rendered as thin filled canvas polygons rather than
+                // strokes so width varies naturally with each river's real corridor size.
+                if (riversGeoJSON) {
+                    L.geoJSON(riversGeoJSON, {
+                        style: {
+                            fillColor: '#3f6f9e',
+                            fillOpacity: 0.55,
+                            color: '#3f6f9e',
+                            weight: 0.6,
+                            opacity: 0.5,
+                            interactive: false
+                        }
+                    }).addTo(map);
+                }
+
+                // Overlapping Layer: Country Boundaries + world-wrap "echo" copies,
+                // dissolved fresh from current effective ownership (see
+                // rebuildCountryLayers() — shared with re-dissolving after an AI-driven
+                // map change, so this is the only place that ever builds these layers).
+                rebuildCountryLayers();
+
+                // City + military-unit point features, rendered at every WORLD_OFFSETS
+                // copy too (same reasoning as country labels: otherwise they'd vanish the
+                // moment you scroll a full world east/west).
+                updateLoaderText("Placing Cities & Units...");
+                WORLD_OFFSETS.forEach(function(offset) {
+                    buildCityMarkers(offset);
+                    buildUnitMarkers(offset);
+                });
+
+                // Track initial zoom bucket so the first zoomend doesn't do a redundant restyle pass
+                lastZoomAboveThreshold = map.getZoom() >= ZOOM_THRESHOLD;
+
+                // Attach dynamic resize handlers hooked directly into browser canvas matrix calculations.
+                // NOTE: intentionally NOT hooked to the 'zoom' (mid-animation) event. Leaflet
+                // CSS-transforms the overlayPane (which our labels live in) during the zoom
+                // animation, smoothly scaling them for free; if we also rewrite left/top/font-size
+                // on every animation tick, our JS positions fight the CSS transform and the
+                // labels visibly stutter/"stick then jump". Only recompute once the animation
+                // (or pan) has settled.
+                map.on('zoomend', handleZoomStateChange);
+                map.on('zoomend', updateLabelLayout);
+                map.on('moveend', updateLabelLayout);
+                map.on('zoomend', updateFeatureLayout);
+                map.on('moveend', updateFeatureLayout);
+                updateLabelLayout();
+                updateFeatureLayout();
+
+                // Hand off to game.js (Actions/Chat/Advisor/Search/Jump Forward) now
+                // that countryLookup, cities, targetObject, and the province/country
+                // layers all exist — everything that system needs to build its own
+                // lookups and UI. Guarded so the map still works standalone if
+                // game.js failed to load for any reason.
+                if (typeof initGameSystems === 'function') {
+                    try { initGameSystems(); } catch (gsErr) { console.error('Game systems failed to initialize:', gsErr); }
+                }
+
+                // Teardown pre-render view blocker
+                document.getElementById('loader').style.display = 'none';
+
+            } catch (error) {
+                console.error("Initialization failure within offline client asset chain:", error);
+                updateLoaderText("Error loading map layout. Ensure local files match relative layout structure and web server permissions allow fetching local assets.");
+            }
+        }
+
+        // 4. Interaction Events / Map Mechanics
+        function onEachMunicipality(feature, layer) {
+            const props = feature.properties;
+            const effectiveCode = getEffectiveCountry(props.shapeID, props.shapeGroup);
+            const countryName = countryLookup[effectiveCode] || effectiveCode || "Unknown Territory";
+            const adminName = props.shapeName || "Unnamed Province";
+
+            if (props.shapeID) provinceLayerById[props.shapeID] = layer;
+
+            // Tooltip composition optimizing fast context evaluation over high poly matrices
+            layer.bindTooltip(`<strong>${adminName}</strong><br/><span style="color:#9ca3af;">${countryName} (${props.shapeType})</span>`, {
+                sticky: true,
+                direction: 'auto',
+                opacity: 0.95
+            });
+
+            // Interactive highlights for grand strategy context
+            layer.on({
+                mouseover: function(e) {
+                    const l = e.target;
+                    l.setStyle({
+                        fillOpacity: 1.0,
+                        color: '#ffffff',
+                        weight: 1.0
+                    });
+                    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                        l.bringToFront();
+                    }
+                    if (countryLayer) countryLayer.bringToFront(); // Ensure global rims always overlay details
+                },
+                mouseout: function(e) {
+                    municipalityLayer.resetStyle(e.target);
+                }
+            });
+        }
+
+        // 5. Reactive Zoom Logic
+        // PATCH: only touch the ~49k layers when we actually cross the ZOOM_THRESHOLD boundary,
+        // instead of re-styling every layer on every single zoom tick. This is the difference
+        // between a barely-noticeable style flip and a multi-second stutter each time you zoom.
+        function handleZoomStateChange() {
+            const currentZoom = map.getZoom();
+            const nowAboveThreshold = currentZoom >= ZOOM_THRESHOLD;
+
+            if (nowAboveThreshold === lastZoomAboveThreshold) {
+                return; // still in the same bucket, nothing to restyle
+            }
+            lastZoomAboveThreshold = nowAboveThreshold;
+
+            municipalityLayer.eachLayer(function(layer) {
+                // Matches the initial style function above: a real dark stroke at low
+                // opacity at every zoom level (not matched-to-fill/invisible), so
+                // province/state borders stay identifiable whether zoomed in or out.
+                layer.setStyle({
+                    weight: (nowAboveThreshold ? BASE_MUNICIPALITY_WEIGHT_ZOOMED : BASE_MUNICIPALITY_WEIGHT_UNZOOMED) * mapSettings.borderSize,
+                    color: nowAboveThreshold ? '#241f18' : '#161310',
+                    opacity: nowAboveThreshold ? 0.5 : 0.32,
+                    dashArray: nowAboveThreshold ? '2,3' : null
+                });
+            });
+
+            // PERFORMANCE: this is the actual lag fix — attach/detach the whole
+            // ~49k-feature municipality layer at the zoom-threshold boundary instead
+            // of merely restyling it, so Leaflet has nothing to touch for it at all
+            // while zoomed out (see the matching comment in loadMapData()).
+            if (nowAboveThreshold) {
+                // Zoomed in: county-level detail takes over the coloring, so the
+                // primary country-border copy goes hollow again (fillOpacity 0) to
+                // avoid painting flat color over the real per-province fills
+                // underneath it.
+                if (!map.hasLayer(municipalityLayer)) {
+                    map.addLayer(municipalityLayer);
+                }
+                countryBorderLayers.forEach(function(layer) {
+                    if (layer.__isPrimaryCountryLayer) layer.setStyle({ fillOpacity: 0 });
+                });
+            } else {
+                // Zoomed out: no county-level layer is drawing at all now, so the
+                // primary country-border copy has to supply the fill itself —
+                // exactly like the two +-360 "echo" copies already do at every zoom.
+                if (map.hasLayer(municipalityLayer)) {
+                    map.removeLayer(municipalityLayer);
+                }
+                countryBorderLayers.forEach(function(layer) {
+                    if (layer.__isPrimaryCountryLayer) {
+                        layer.setStyle(function(feature) {
+                            return { fillColor: getCountryColor(feature.properties.shapeGroup), fillOpacity: TERRAIN_FILL_OPACITY };
+                        });
+                    }
+                });
+            }
+        }
+
+        // 6. Country Name Labels ("atlas watermark" scaling + shape-following rotation)
+        // Small countries render as normal, legible, opaque labels; large countries scale
+        // their text up to roughly fill the country's on-screen footprint and fade toward
+        // translucency so they read as a background watermark. Each label is also rotated
+        // to align with the country's dominant axis (via 2D PCA over its boundary
+        // vertices), giving tilted/contour-following labels
+        // (e.g. "ALGERIA" running diagonally along its NE-SW elongation).
+        // Countries that straddle the antimeridian (Russia/Chukotka, the US/Aleutians,
+        // Fiji, New Zealand's outlying islands, etc.) dissolve into a MultiPolygon whose
+        // naive lon/lat bounding box balloons to nearly the width of the whole map, which
+        // both mis-sizes and mis-positions a label built from the full merged geometry.
+        // Fix: label using individual rings (by lon/lat bbox area) rather than the full
+        // merged geometry, which in practice isolates each real landmass and drops
+        // trans-dateline slivers.
+        //
+        // A country doesn't get just ONE label anymore either:
+        // every separate significant landmass a country owns carries its own copy of the
+        // name — e.g. Alaska reads "UNITED STATES OF AMERICA" even though it's a separate
+        // ring from the CONUS mainland, and Canada's big Arctic islands (Baffin,
+        // Ellesmere, Victoria...) each carry their own "CANADA". getLabelRings returns
+        // every ring worth labeling, largest first; getPrimaryRing (kept as a thin
+        // wrapper) is just "the first of those" for any call site that only wants one.
+        function ringBBox(ring) {
+            let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+            for (let i = 0; i < ring.length; i++) {
+                const lon = ring[i][0], lat = ring[i][1];
+                if (lon < minLon) minLon = lon;
+                if (lon > maxLon) maxLon = lon;
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+            }
+            return { area: (maxLon - minLon) * (maxLat - minLat), minLon, maxLon, minLat, maxLat };
+        }
+
+        const MAX_LABEL_INSTANCES_PER_COUNTRY = 6;
+        // A secondary landmass has to be at least this fraction of the country's biggest
+        // ring's area to earn its own label — keeps tiny offshore islets from spawning a
+        // wall of repeated country names, while still catching real secondary landmasses
+        // like Alaska (roughly a third of CONUS's bbox area) or a big Arctic island.
+        const MIN_SECONDARY_RING_AREA_FRACTION = 0.05;
+
+        function getLabelRings(geometry) {
+            let rings;
+            if (geometry.type === 'Polygon') {
+                rings = [geometry.coordinates[0]];
+            } else if (geometry.type === 'MultiPolygon') {
+                rings = geometry.coordinates.map(function(poly) { return poly[0]; });
+            } else {
+                return [];
+            }
+
+            const candidates = [];
+            rings.forEach(function(ring) {
+                if (!ring || ring.length < 3) return;
+                const bb = ringBBox(ring);
+                // Skip rings whose longitude span looks like a dateline-wrap artifact
+                // rather than a real single landmass fragment.
+                if (bb.maxLon - bb.minLon > 170) return;
+                candidates.push({ ring, bb });
+            });
+
+            if (candidates.length === 0) {
+                // Every ring tripped the dateline heuristic (fully trans-meridian
+                // country) — fall back to all of them anyway so the country still gets
+                // at least one label.
+                rings.forEach(function(ring) {
+                    if (!ring || ring.length < 3) return;
+                    candidates.push({ ring, bb: ringBBox(ring) });
+                });
+            }
+            if (candidates.length === 0) return [];
+
+            candidates.sort(function(a, b) { return b.bb.area - a.bb.area; });
+            const primaryArea = candidates[0].bb.area;
+            const kept = candidates.filter(function(c, i) {
+                return i === 0 || c.bb.area >= primaryArea * MIN_SECONDARY_RING_AREA_FRACTION;
+            });
+            return kept.slice(0, MAX_LABEL_INSTANCES_PER_COUNTRY);
+        }
+
+        function getPrimaryRing(geometry) {
+            const rings = getLabelRings(geometry);
+            return rings.length ? rings[0] : null;
+        }
+
+        function computeOrientationAngleDegFromRing(ring) {
+            // Subsample dense coastlines so the one-time PCA pass over ~190 countries
+            // stays fast even for complex dissolved borders.
+            const step = Math.max(1, Math.floor(ring.length / 400));
+            const sample = [];
+            for (let i = 0; i < ring.length; i += step) sample.push(ring[i]);
+
+            const projected = sample.map(function(p) {
+                return map.latLngToLayerPoint([p[1], p[0]]); // p = [lon, lat]
+            });
+
+            let mx = 0, my = 0;
+            projected.forEach(function(pt) { mx += pt.x; my += pt.y; });
+            mx /= projected.length; my /= projected.length;
+
+            let Sxx = 0, Syy = 0, Sxy = 0;
+            projected.forEach(function(pt) {
+                const dx = pt.x - mx, dy = pt.y - my;
+                Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy;
+            });
+            Sxx /= projected.length; Syy /= projected.length; Sxy /= projected.length;
+
+            let angleDeg = 0.5 * Math.atan2(2 * Sxy, Sxx - Syy) * 180 / Math.PI;
+            // Normalize so labels never render upside down
+            if (angleDeg > 90) angleDeg -= 180;
+            if (angleDeg <= -90) angleDeg += 180;
+            return angleDeg;
+        }
+
+        // NOTE on sizing philosophy: RELATIVE label size tracks
+        // how much territory a nation controls, not the current zoom level — a bigger
+        // nation's name should always render bigger than a smaller nation's, at any
+        // zoom. But freezing the ABSOLUTE pixel size entirely (an earlier approach
+        // here) was wrong: at whole-world zoom every country's name still needs to
+        // shrink down or the text piles into an unreadable mass, exactly like any other
+        // map label. The fix: keep a fixed per-country "significance" ranking
+        // (sizeMetric, from real geographic footprint) computed once at load, but scale
+        // the actual on-screen font size by current zoom every zoomend/moveend — so
+        // ranking between countries never changes, only overall scale does. When this
+        // map gets wired into the actual game backend, swap `sizeMetric` below for live
+        // province count.
+        function clamp(v, min, max) {
+            return Math.max(min, Math.min(max, v));
+        }
+
+        // Maps the settings panel's 1-10 "Zoom Sensitivity" slider (1 = least, 10 = most
+        // sensitive) onto Leaflet's wheelPxPerZoomLevel option, which runs the opposite
+        // direction (smaller number = fewer scroll pixels needed per zoom step = feels
+        // MORE sensitive). Range chosen so 5 (the default) lands on Leaflet's own
+        // built-in default of 60.
+        function zoomSensitivityToWheelPx(sensitivity) {
+            return clamp(180 - sensitivity * 24, 12, 156);
+        }
+
+        const LABEL_SPACING_FACTOR = 0.10;
+
+        // Traces a "spine" through a country's own boundary — not a single straight PCA
+        // line, but a curve that dips and bends with the coastline, which is what lets
+        // a <textPath> label read as e.g. "BRAZIL" arcing along the northeast coast or
+        // "UNITED STATES OF AMERICA" following the Gulf-to-Atlantic curve. Returns an ordered array of LatLngs, or null
+        // if the ring is degenerate.
+        function computeSpineLatLngs(ring, angleDeg) {
+            const step = Math.max(1, Math.floor(ring.length / 400));
+            const sample = [];
+            for (let i = 0; i < ring.length; i += step) sample.push(ring[i]);
+            if (sample.length < 2) return null;
+
+            const projected = sample.map(function(p) {
+                return map.latLngToLayerPoint([p[1], p[0]]); // p = [lon, lat]
+            });
+
+            let cx = 0, cy = 0;
+            projected.forEach(function(pt) { cx += pt.x; cy += pt.y; });
+            cx /= projected.length; cy /= projected.length;
+
+            const theta = angleDeg * Math.PI / 180;
+            const cosT = Math.cos(theta), sinT = Math.sin(theta);
+
+            // Rotate every boundary sample into a frame aligned with the country's
+            // principal axis: u runs "along" the shape, v runs "across" it.
+            const rotated = projected.map(function(pt) {
+                const dx = pt.x - cx, dy = pt.y - cy;
+                return { u: dx * cosT + dy * sinT, v: -dx * sinT + dy * cosT };
+            });
+
+            let uMin = Infinity, uMax = -Infinity, vMinAll = Infinity, vMaxAll = -Infinity;
+            rotated.forEach(function(p) {
+                if (p.u < uMin) uMin = p.u;
+                if (p.u > uMax) uMax = p.u;
+                if (p.v < vMinAll) vMinAll = p.v;
+                if (p.v > vMaxAll) vMaxAll = p.v;
+            });
+            if (!isFinite(uMin) || uMax - uMin < 1) return null;
+
+            // Fresh reference screenshots of the US/Canada region show clearly curved,
+            // coastline-following text ("UNITED STATES OF AMERICA" and "CANADA" both
+            // arc rather than sit on one straight rotated line) — re-enabling curve
+            // tracing for elongated countries. Compact/round countries (Mali, Algeria,
+            // etc.) still render as effectively-straight because their elongation ratio
+            // rarely clears the gate below, matching the earlier straight-text
+            // observation for that region.
+            const elongation = (uMax - uMin) / Math.max(vMaxAll - vMinAll, 1);
+            const MIN_SAMPLES_PER_BUCKET = 6;
+            const maxBuckets = Math.floor(rotated.length / MIN_SAMPLES_PER_BUCKET);
+            const ENABLE_LABEL_CURVE = true;
+            const BUCKETS = (ENABLE_LABEL_CURVE && elongation > 1.6) ? clamp(maxBuckets, 0, 9) : 0;
+
+            const spineUV = [];
+            if (BUCKETS >= 3) {
+                // Bucket the boundary into evenly-spaced slices along u and take the
+                // vertical midpoint of each slice — this traces the shape's centerline
+                // (bending with the coastline) instead of a single straight line.
+                const bucketW = (uMax - uMin) / BUCKETS;
+                for (let b = 0; b < BUCKETS; b++) {
+                    const bLo = uMin + b * bucketW;
+                    const bHi = bLo + bucketW;
+                    let vMin = Infinity, vMax = -Infinity, uSum = 0, count = 0;
+                    rotated.forEach(function(p) {
+                        if (p.u >= bLo && p.u < bHi) {
+                            if (p.v < vMin) vMin = p.v;
+                            if (p.v > vMax) vMax = p.v;
+                            uSum += p.u; count++;
+                        }
+                    });
+                    if (count > 0) spineUV.push({ u: uSum / count, v: (vMin + vMax) / 2 });
+                }
+                // Light moving-average smoothing over the v (perpendicular) coordinate so
+                // sparse/noisy buckets don't produce a wiggly or self-crossing curve.
+                if (spineUV.length >= 3) {
+                    const smoothed = spineUV.map(function(p, i) {
+                        const prev = spineUV[i - 1] || p;
+                        const next = spineUV[i + 1] || p;
+                        return { u: p.u, v: (prev.v + p.v * 2 + next.v) / 4 };
+                    });
+                    spineUV.length = 0;
+                    Array.prototype.push.apply(spineUV, smoothed);
+                }
+            }
+
+            // Degenerate/compact shapes (too few populated buckets, or not elongated
+            // enough to bother) fall back to a straight two-point spine spanning the
+            // full axis — text still reads fine as a straight rotated label there.
+            if (spineUV.length < 3) {
+                spineUV.length = 0;
+                spineUV.push({ u: uMin, v: 0 }, { u: uMax, v: 0 });
+            }
+
+            return spineUV.map(function(p) {
+                const x = cx + p.u * cosT - p.v * sinT;
+                const y = cy + p.u * sinT + p.v * cosT;
+                return map.layerPointToLatLng(L.point(x, y));
+            });
+        }
+
+        // Converts an ordered list of {x,y} pixel points into a smooth SVG path "d"
+        // string (Catmull-Rom spline, converted to cubic Beziers with the standard 1/6
+        // tension) for a <textPath> to ride along.
+        function smoothPathD(points) {
+            if (points.length < 2) return '';
+            let d = 'M' + points[0].x + ',' + points[0].y;
+            if (points.length === 2) {
+                return d + ' L' + points[1].x + ',' + points[1].y;
+            }
+            for (let i = 0; i < points.length - 1; i++) {
+                const p0 = points[i - 1] || points[i];
+                const p1 = points[i];
+                const p2 = points[i + 1];
+                const p3 = points[i + 2] || p2;
+                const c1x = p1.x + (p2.x - p0.x) / 6;
+                const c1y = p1.y + (p2.y - p0.y) / 6;
+                const c2x = p2.x - (p3.x - p1.x) / 6;
+                const c2y = p2.y - (p3.y - p1.y) / 6;
+                d += ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2.x + ',' + p2.y;
+            }
+            return d;
+        }
+
+        // Target visual result: a
+        // country's name never bleeds across a border into a neighbor, because it's
+        // masked to that country's own shape at the pixel level. We approximate the same
+        // effect here with an SVG clip-path built from the country's own primary ring,
+        // so any part of a label's curved text that would otherwise spill past its
+        // country's coastline simply isn't drawn — the same reason MALI and ALGERIA
+        // never collide and BRAZIL's name never touches the ocean.
+        function ringToLatLngs(ring) {
+            const step = Math.max(1, Math.floor(ring.length / 300));
+            const out = [];
+            for (let i = 0; i < ring.length; i += step) out.push(L.latLng(ring[i][1], ring[i][0]));
+            // Ensure the ring is explicitly closed for a clean clip polygon.
+            const first = ring[0], last = ring[ring.length - 1];
+            if (first[0] !== last[0] || first[1] !== last[1]) out.push(L.latLng(first[1], first[0]));
+            return out;
+        }
+
+        // Closed-polygon counterpart to smoothPathD — straight segments (clip accuracy
+        // matters more than curve smoothness here) ending in Z to close the shape.
+        function polygonPathD(points) {
+            if (points.length < 3) return '';
+            let d = 'M' + points[0].x + ',' + points[0].y;
+            for (let i = 1; i < points.length; i++) d += ' L' + points[i].x + ',' + points[i].y;
+            return d + ' Z';
+        }
+
+        // Builds one label PER SIGNIFICANT LANDMASS a country owns (see getLabelRings),
+        // not just one per country — so Alaska carries its own "UNITED STATES OF
+        // AMERICA" and Canada's big Arctic islands each carry their own "CANADA".
+        // Each instance gets its own path/clip/text trio
+        // sized off that specific ring's own area, so a country's smaller landmasses
+        // naturally render smaller text than its main territory.
+        function buildCountryLabels(geoJsonLayer) {
+            const svgNS = 'http://www.w3.org/2000/svg';
+            geoJsonLayer.eachLayer(function(layer) {
+                const shapeGroup = layer.feature.properties.shapeGroup;
+                const name = countryLookup[shapeGroup] || shapeGroup;
+                if (!name) return;
+
+                const labelRings = getLabelRings(layer.feature.geometry);
+                labelRings.forEach(function(ringInfo) {
+                    const angleDeg = computeOrientationAngleDegFromRing(ringInfo.ring);
+                    const spineLatLngs = computeSpineLatLngs(ringInfo.ring, angleDeg);
+                    if (!spineLatLngs) return;
+
+                    // Zoom-independent "significance" ranking derived from real
+                    // geographic bbox area (deg^2). A 4th-root compresses Russia-vs-
+                    // Vatican's ~30,000,000x area ratio into a usable range without
+                    // flattening everything to the same size or blowing tiny countries
+                    // out entirely.
+                    const sizeMetric = Math.pow(Math.max(ringInfo.bb.area, 0.0001), 0.25);
+                    const clipRingLatLngs = ringToLatLngs(ringInfo.ring);
+
+                    const pathId = 'label-path-' + (labelIdCounter++);
+                    const pathEl = document.createElementNS(svgNS, 'path');
+                    pathEl.setAttribute('class', 'country-label-path');
+                    pathEl.setAttribute('id', pathId);
+                    labelLayerEl.appendChild(pathEl);
+
+                    const clipId = 'label-clip-' + labelIdCounter;
+                    const clipPathEl = document.createElementNS(svgNS, 'clipPath');
+                    clipPathEl.setAttribute('id', clipId);
+                    const clipShapeEl = document.createElementNS(svgNS, 'path');
+                    clipPathEl.appendChild(clipShapeEl);
+                    labelLayerEl.appendChild(clipPathEl);
+
+                    const textEl = document.createElementNS(svgNS, 'text');
+                    textEl.setAttribute('class', 'country-label-text');
+                    textEl.style.clipPath = 'url(#' + clipId + ')';
+                    const textPathEl = document.createElementNS(svgNS, 'textPath');
+                    textPathEl.setAttribute('startOffset', '50%');
+                    textPathEl.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#' + pathId);
+                    textPathEl.setAttribute('href', '#' + pathId);
+                    textPathEl.textContent = name;
+                    textEl.appendChild(textPathEl);
+                    labelLayerEl.appendChild(textEl);
+
+                    countryLabelsCache.push({ pathEl, textEl, clipShapeEl, spineLatLngs, clipRingLatLngs, name, sizeMetric });
+                });
+            });
+        }
+
+        // Big countries' names render huge and translucent (a background "watermark"),
+        // which means a large country's curved text can visually sweep across a small
+        // neighbor's label (e.g. NORWAY's arc passing near Iceland) if the small one
+        // happens to paint underneath in SVG z-order. Re-appending every label in
+        // ascending sizeMetric order after all world copies are built puts big/faint
+        // watermark names at the back and small/legible names on top, so a small
+        // country's label is never visually swallowed by a bigger one behind it.
+        function reorderLabelPaintOrder() {
+            const sorted = countryLabelsCache.slice().sort(function(a, b) { return b.sizeMetric - a.sizeMetric; });
+            sorted.forEach(function(item) {
+                labelLayerEl.appendChild(item.pathEl);
+                labelLayerEl.appendChild(item.textEl);
+            });
+        }
+
+        // Builds (or, called again later, completely REBUILDS) the dissolved
+        // country-outline layers + their name labels from current effective
+        // ownership. This is what makes AI-driven "map changes" actually redraw
+        // national borders — not just recolor one province — after a territory
+        // transfer: every affected country's hull gets re-dissolved from scratch via
+        // topojson.merge, exactly like the very first render, just consulting
+        // provinceOwnerOverrides this time. Runs once at initial load, and again
+        // (only) after a batch of ownership changes from Jump Forward/Actions/Chat.
+        // The municipality layer's per-feature fillColor is only computed once, at
+        // L.geoJSON construction time (loadMapData(), before game.js's
+        // initGameSystems() has restored any saved/seeded provinceOwnerOverrides into
+        // the live `provinceOwnerOverrides` object) — so any override that exists
+        // BEFORE that first render (a returning player's save with prior territory
+        // changes, or a baked-in seed like Somaliland's split from Somalia) never
+        // gets its municipality fill repainted; only rebuildCountryLayers()'s
+        // country-level border/dissolve layer would reflect it, and that layer is
+        // fully transparent at the primary (0deg) world copy, so the stale
+        // municipality color is what actually shows through. Called once from
+        // game.js's initGameSystems() right after overrides are restored, for
+        // exactly the shapeIDs that have an override, mirroring what
+        // applyMapChanges() already does per-shape for changes made during play.
+        function restyleOverriddenMunicipalities() {
+            Object.keys(provinceOwnerOverrides).forEach(function(shapeID) {
+                const layer = provinceLayerById[shapeID];
+                if (!layer) return;
+                const countryCode = provinceOwnerOverrides[shapeID];
+                layer.setStyle({ fillColor: getCountryColor(countryCode) });
+                if (layer.setTooltipContent && layer.feature) {
+                    layer.setTooltipContent(
+                        '<strong>' + layer.feature.properties.shapeName + '</strong><br><span style="color:#9ca3af;">' +
+                        (countryLookup[countryCode] || countryCode) + ' (' + (layer.feature.properties.shapeType || 'ADM2') + ')</span>'
+                    );
+                }
+            });
+        }
+
+        function rebuildCountryLayers() {
+            // Tear down any previous country-outline layers/labels before rebuilding —
+            // otherwise stale copies pile up on the map and in the label SVG.
+            countryBorderLayers.forEach(function(layer) { map.removeLayer(layer); });
+            countryBorderLayers.length = 0;
+            // Reset the label geometry cache — this is the ONLY place the expensive
+            // spine/PCA-angle computation (inside buildCountryLabels(), called below)
+            // is allowed to run. Every zoom/pan reuses whatever gets built here via
+            // updateLabelLayout() instead of recomputing it (see countryLabelsCache's
+            // declaration above for the full reasoning).
+            countryLabelsCache = [];
+            while (labelLayerEl.firstChild) labelLayerEl.removeChild(labelLayerEl.firstChild);
+            // Effective country ownership may have just changed (that's the whole
+            // reason this function is being called) — bump the epoch so any
+            // per-marker "who owns this point" cache (see the capital star/square
+            // capture check in updateFeatureLayout()) knows to re-check rather than
+            // trusting a stale answer from before this rebuild.
+            ownershipEpoch++;
+
+            // Group individual geometry references by CURRENT effective country
+            // (override-aware), not just the original static shapeGroup.
+            const geometriesByCountry = {};
+            targetObject.geometries.forEach(function(geom) {
+                const group = getEffectiveCountry(geom.properties.shapeID, geom.properties.shapeGroup);
+                if (!geometriesByCountry[group]) geometriesByCountry[group] = [];
+                geometriesByCountry[group].push(geom);
+            });
+
+            const countryMergedFeatures = { type: "FeatureCollection", features: [] };
+            for (const [shapeGroup, geometries] of Object.entries(geometriesByCountry)) {
+                const mergedGeometry = topojson.merge(topology, geometries);
+                countryMergedFeatures.features.push({
+                    type: "Feature",
+                    properties: { shapeGroup: shapeGroup },
+                    geometry: mergedGeometry
+                });
+            }
+            countryMergedGeoCache = countryMergedFeatures;
+
+            countryLayer = null;
+            // Whether the primary (0deg) copy should currently show its own fill —
+            // it should whenever municipalityLayer ISN'T attached to the map (i.e.
+            // zoomed out past ZOOM_THRESHOLD), since there's no per-province layer
+            // underneath to supply the color in that case. The two +-360 "echo"
+            // copies never have a municipality layer at all, so they always fill,
+            // at every zoom — see the isPrimary check inside fillOpacity below.
+            const primaryShouldFill = !(map.getZoom() >= ZOOM_THRESHOLD);
+            WORLD_OFFSETS.forEach(function(offset) {
+                const isPrimary = offset === 0;
+                const shiftedFeatures = shiftFeatureCollection(countryMergedFeatures, offset);
+                const layer = L.geoJSON(shiftedFeatures, {
+                    style: function(feature) {
+                        return {
+                            color: '#0a0705',
+                            weight: BASE_COUNTRY_BORDER_WEIGHT * mapSettings.borderSize,
+                            opacity: 1.0,
+                            fillColor: getCountryColor(feature.properties.shapeGroup),
+                            fillOpacity: isPrimary ? (primaryShouldFill ? TERRAIN_FILL_OPACITY : 0) : TERRAIN_FILL_OPACITY,
+                            interactive: false
+                        };
+                    }
+                }).addTo(map);
+                // Tagged so handleZoomStateChange() can restyle ONLY the primary
+                // copy's fillOpacity on a zoom-threshold crossing, without also
+                // wiping out the echo copies' fill (they have no municipality-layer
+                // substitute and must always stay filled, at any zoom).
+                layer.__isPrimaryCountryLayer = isPrimary;
+                countryBorderLayers.push(layer);
+                if (isPrimary) {
+                    countryLayer = layer; // kept as the reference other code (bringToFront, labels) uses
+                }
+                buildCountryLabels(layer);
+            });
+            reorderLabelPaintOrder();
+            updateLabelLayout();
+        }
+
+        // ==========================================================================
+        // Advisor map-snapshot embeds — small inline SVGs the Advisor panel (see
+        // game.js) draws inside a rich-text reply when the AI emits a "mapdata"
+        // block. Reuses the dissolved per-country geometry rebuildCountryLayers()
+        // already computed (countryMergedGeoCache) instead of re-merging ~49k
+        // municipality shapes per request. Deliberately a flat equirectangular
+        // projection (lon -> x, lat -> y, no antimeridian handling) since this is a
+        // small illustrative inset, not the interactive map.
+        // ==========================================================================
+        function projectLonLat(lon, lat) {
+            return [lon + 180, 90 - lat];
+        }
+        function ringToPathPoints(ring) {
+            return ring.map(function(p) {
+                const xy = projectLonLat(p[0], p[1]);
+                return xy[0].toFixed(1) + ',' + xy[1].toFixed(1);
+            }).join(' L ');
+        }
+        function geometryToPathD(geometry) {
+            if (!geometry) return '';
+            const polys = geometry.type === 'Polygon' ? [geometry.coordinates]
+                : (geometry.type === 'MultiPolygon' ? geometry.coordinates : []);
+            let d = '';
+            polys.forEach(function(rings) {
+                rings.forEach(function(ring) {
+                    if (!ring || !ring.length) return;
+                    d += 'M ' + ringToPathPoints(ring) + ' Z ';
+                });
+            });
+            return d;
+        }
+        // config: { countries: [{ code, color }], neutralColor? } — `color` values
+        // must already be validated hex strings (see parseMapSnapshotBlock in
+        // game.js) before reaching here, since they land directly in an SVG fill
+        // attribute. Returns an <svg> string, or null if no country geometry is
+        // available yet (map not loaded).
+        function buildCountrySnapshotSVG(config) {
+            const geoCache = countryMergedGeoCache;
+            if (!geoCache || !geoCache.features || !geoCache.features.length) return null;
+            const colorByCountry = {};
+            (config.countries || []).forEach(function(c) {
+                if (c && c.code && c.color) colorByCountry[c.code] = c.color;
+            });
+            const neutral = config.neutralColor || '#4a4438';
+            let paths = '';
+            geoCache.features.forEach(function(f) {
+                const code = f.properties.shapeGroup;
+                const d = geometryToPathD(f.geometry);
+                if (!d) return;
+                const highlighted = !!colorByCountry[code];
+                const fill = colorByCountry[code] || neutral;
+                paths += '<path d="' + d + '" fill="' + fill + '" fill-rule="evenodd" ' +
+                    'stroke="#0a0705" stroke-width="' + (highlighted ? '0.6' : '0.3') + '" ' +
+                    'fill-opacity="' + (highlighted ? '0.92' : '0.5') + '"/>';
+            });
+            return '<svg viewBox="0 0 360 180" xmlns="http://www.w3.org/2000/svg">' +
+                '<rect x="0" y="0" width="360" height="180" fill="#151009"/>' +
+                paths +
+                '</svg>';
+        }
+
+        function updateLabelLayout() {
+            if (!map || !countryLabelsCache || countryLabelsCache.length === 0) return;
+
+            const zoom = map.getZoom();
+            // Labels store a
+            // `labelFontSizeMeters` value (real-world meters, not pixels) and let the
+            // map projection do the scaling. In Web Mercator, meters-per-pixel at a
+            // given latitude is proportional to 1/2^zoom — so a meters-sized label
+            // grows/shrinks by an exact factor of 2 per zoom level, at every latitude
+            // (the latitude-dependent distortion term cancels out between any two zooms
+            // at the same point). That's the "grows/shrinks consistently across zoom"
+            // behavior — not a tuned/dampened curve like the 1.32^zoom this replaced.
+            const zoomScale = Math.pow(2, zoom - 3);
+
+            // Pass 1: compute geometry/size for every label without touching the DOM yet.
+            const candidates = [];
+            countryLabelsCache.forEach(function(item) {
+                const pts = item.spineLatLngs.map(function(ll) { return map.latLngToLayerPoint(ll); });
+                let pathLen = 0;
+                for (let i = 1; i < pts.length; i++) {
+                    pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+                }
+
+                // Lower base coefficients than before, since zoomScale now grows a full
+                // 2x per level (not a dampened 1.32x) — this keeps the zoom-2..10 range
+                // useful instead of every label slamming into the max clamp by zoom 6.
+                // NOTE: these two coefficients are fixed constants, not mapSettings.
+                // featureSizeAbsolute/Relative — those panel sliders actually control
+                // CITY and MILITARY UNIT marker size (see
+                // updateFeatureLayout() below), not country-name text, so country label
+                // sizing intentionally stays independent of them. The values below (1.6,
+                // 2.6) are just the old default (slider = 1.0) baked in directly, so
+                // visual behavior here is unchanged from before this was decoupled.
+                let fontSize = clamp(
+                    1.6 + 2.6 * item.sizeMetric * zoomScale,
+                    7, 140
+                );
+
+                // Fade out (not display:none) once the country's on-screen footprint is
+                // essentially nothing, or its computed size has shrunk below legibility —
+                // avoids both a label floating over an invisible sliver and a wall of
+                // tiny overlapping text at whole-world zoom, while letting a label that
+                // crosses back over these thresholds (e.g. zooming in) fade smoothly back
+                // in via the existing CSS opacity transition instead of popping.
+                if (pathLen < 3 || fontSize < 7.5) {
+                    item.textEl.style.opacity = '0';
+                    return;
+                }
+
+                // Character-width factor — 0.55 constant for label layout
+                // (label.length*fontSize*.55/2).
+                const CHAR_W = 0.55;
+                // A country's "significance" size can call for a bigger font than its own
+                // (short) coastline spine can actually hold — without this cap, a small
+                // elongated country's <textPath> text overruns and doubles back on itself,
+                // reading as an illegible smear of overlapping glyphs instead of a name.
+                // Capping fontSize so the estimated text width never exceeds the path
+                // length keeps every label self-consistent with the shape it's drawn on.
+                const perCharWidth = CHAR_W + LABEL_SPACING_FACTOR;
+                const maxFitFontSize = (pathLen * 0.94) / (item.name.length * perCharWidth);
+                fontSize = Math.min(fontSize, maxFitFontSize);
+                if (fontSize < 6) {
+                    item.textEl.style.opacity = '0';
+                    return;
+                }
+
+                let cx = 0, cy = 0;
+                pts.forEach(function(p) { cx += p.x; cy += p.y; });
+                cx /= pts.length; cy /= pts.length;
+
+                // Collision footprint as a half-width/half-height box for the
+                // declutter pass (halfW = label.length *
+                // fontSize * .55/2, halfH = .85 * fontSize/2) — then reduced to a single
+                // radius (the box's half-diagonal) since our collision check below is
+                // still a simple circle test, just a tighter one than before.
+                // IMPORTANT: this must be based on the actual rendered glyph width
+                // (estWidth), NOT pathLen. pathLen is the full straight-line span of the
+                // country's own shape (uMin-to-uMax), which for a huge, wide country like
+                // Canada or Russia can be thousands of pixels — many times wider than the
+                // short text actually painted at its center. Flooring halfW by pathLen
+                // (an earlier version of this code did `Math.max(pathLen, estWidth)`)
+                // inflated big countries' collision circles enough to blanket-hide
+                // entirely separate, smaller neighbors (e.g. Canada's radius swallowing
+                // the United States' and Mexico's label centers) even though there was no
+                // actual visual overlap. Text fit against the path is already enforced
+                // separately above via maxFitFontSize.
+                const estWidth = item.name.length * fontSize * CHAR_W
+                    + Math.max(0, item.name.length - 1) * fontSize * LABEL_SPACING_FACTOR;
+                const halfW = estWidth / 2;
+                const halfH = 0.85 * fontSize / 2;
+                const radius = Math.hypot(halfW, halfH);
+
+                candidates.push({ item, pts, fontSize, cx, cy, radius, sizeMetric: item.sizeMetric });
+            });
+
+            // Pass 2: decide which labels actually get drawn. Bigger (more significant)
+            // countries claim space first; a smaller country whose label would collide
+            // with an already-placed bigger one is skipped rather than overlapping into
+            // an unreadable pile — this is what keeps dense clusters (the Balkans, the
+            // Gulf states, West Africa) legible instead of turning into a wall of text.
+            candidates.sort(function(a, b) { return b.fontSize - a.fontSize; });
+            const placed = [];
+            candidates.forEach(function(c) {
+                const collides = placed.some(function(p) {
+                    const d = Math.hypot(c.cx - p.cx, c.cy - p.cy);
+                    return d < (c.radius + p.radius) * 0.85;
+                });
+                if (collides) {
+                    c.item.textEl.style.opacity = '0';
+                    return;
+                }
+                placed.push(c);
+
+                const item = c.item;
+                item.pathEl.setAttribute('d', smoothPathD(c.pts));
+                item.textEl.style.fontSize = c.fontSize + 'px';
+                item.textEl.style.letterSpacing = (c.fontSize * LABEL_SPACING_FACTOR) + 'px';
+                item.textEl.style.strokeWidth = Math.max(0.5, c.fontSize * 0.045) + 'px';
+                item.textEl.style.opacity = clamp(1 - (c.fontSize / 220), 0.28, 0.95);
+
+                // Mask the label to its own country's coastline every update, so text
+                // never visibly bleeds into the ocean or a neighboring country.
+                const clipPts = item.clipRingLatLngs.map(function(ll) { return map.latLngToLayerPoint(ll); });
+                item.clipShapeEl.setAttribute('d', polygonPathD(clipPts));
+            });
+        }
+
+        // 6b. City & Military Unit point features. These are the actual thing the
+        // "Feature Size (Relative/Absolute)" sliders control — a fixed
+        // icon (star/diamond/square) plus a name label anchored just below it, NOT
+        // country name text (see the fixed constants inside updateLabelLayout() above).
+        function starPathD(cx, cy, r) {
+            const outerR = r, innerR = r * 0.42;
+            let d = '';
+            for (let i = 0; i < 10; i++) {
+                const angle = -Math.PI / 2 + i * Math.PI / 5;
+                const rad = (i % 2 === 0) ? outerR : innerR;
+                const x = cx + rad * Math.cos(angle);
+                const y = cy + rad * Math.sin(angle);
+                d += (i === 0 ? 'M' : 'L') + x.toFixed(2) + ',' + y.toFixed(2);
+            }
+            return d + 'Z';
+        }
+        function diamondPathD(cx, cy, r) {
+            return 'M' + cx + ',' + (cy - r) + ' L' + (cx + r) + ',' + cy + ' L' + cx + ',' + (cy + r) + ' L' + (cx - r) + ',' + cy + ' Z';
+        }
+        function squarePathD(cx, cy, r) {
+            return 'M' + (cx - r) + ',' + (cy - r) + ' L' + (cx + r) + ',' + (cy - r) + ' L' + (cx + r) + ',' + (cy + r) + ' L' + (cx - r) + ',' + (cy + r) + ' Z';
+        }
+
+        // ---- "Map Feature" click popup (city or unit marker) -----------------------
+        // A real Leaflet popup anchored to the clicked lat/lon — not a full-screen
+        // modal — so it stays pinned to that map point (with the little pointer tip)
+        // through panning/zooming, the way city/marker info popups work in the
+        // reference design. Shows country + containing province/municipality, no raw
+        // coordinates. Reused for both city and unit markers; units additionally get
+        // a Remove button inside the popup.
+        let activeFeaturePopup = null;
+        let activeFeaturePopupZoomHandler = null;
+
+        // Gentle, small-range zoom-based scale for the popup card itself (NOT the
+        // aggressive Math.pow(2, zoom-3) curve used for map icon sizing — this is a
+        // fixed UI card that should only grow/shrink modestly with zoom, per the
+        // reference screenshots showing it slightly smaller when zoomed further out).
+        function featurePopupScaleForZoom(zoom) {
+            return clamp(0.82 + (zoom - 4) * 0.045, 0.72, 1.15);
+        }
+
+        function flashProvinceLayer(shapeID) {
+            const layer = provinceLayerById[shapeID];
+            if (!layer || !layer.setStyle) return;
+            const original = { color: layer.options.color, weight: layer.options.weight };
+            layer.setStyle({ color: '#ffffff', weight: 2.5 });
+            setTimeout(function() { layer.setStyle(original); }, 1200);
+        }
+
+        function buildFeaturePopupRow(dotColor, name, onInfo, infoTitle) {
+            const row = document.createElement('div');
+            row.className = 'feature-popup-row';
+            const main = document.createElement('div');
+            main.className = 'feature-popup-row-main';
+            if (dotColor) {
+                const dot = document.createElement('span');
+                dot.className = 'feature-popup-dot';
+                dot.style.background = dotColor;
+                main.appendChild(dot);
+            }
+            const nameEl = document.createElement('span');
+            nameEl.className = 'feature-popup-row-name';
+            nameEl.textContent = name;
+            nameEl.title = name;
+            main.appendChild(nameEl);
+            row.appendChild(main);
+
+            const actions = document.createElement('div');
+            actions.className = 'feature-popup-row-actions';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'feature-popup-icon-btn';
+            copyBtn.title = 'Copy';
+            copyBtn.innerHTML = '&#128203;';
+            copyBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(name).catch(function() {});
+                }
+                const original = copyBtn.innerHTML;
+                copyBtn.innerHTML = '&#10003;';
+                setTimeout(function() { copyBtn.innerHTML = original; }, 900);
+            });
+            actions.appendChild(copyBtn);
+
+            if (onInfo) {
+                const infoBtn = document.createElement('button');
+                infoBtn.type = 'button';
+                infoBtn.className = 'feature-popup-icon-btn';
+                infoBtn.title = infoTitle || 'Highlight on map';
+                infoBtn.innerHTML = '&#8505;';
+                infoBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    onInfo();
+                });
+                actions.appendChild(infoBtn);
+            }
+
+            row.appendChild(actions);
+            return row;
+        }
+
+        function buildFeaturePopupContent(feature, location, countryCode, countryName) {
+            const wrap = document.createElement('div');
+            wrap.className = 'feature-popup-inner';
+            wrap.style.transform = 'scale(' + featurePopupScaleForZoom(map.getZoom()) + ')';
+
+            // Resolved the exact same local-only way buildFlagElement() in
+            // game.js resolves flags for the nation picker/Country Details
+            // panel (window.resolveFlagSrc, exposed by game.js) — era
+            // override first, "../assets/flags/<code>/default.png" fallback,
+            // never flagcdn.com for a country flag.
+            const flagSrc = countryCode && window.resolveFlagSrc ? window.resolveFlagSrc(countryCode) : null;
+            if (flagSrc) {
+                const img = document.createElement('img');
+                img.className = 'feature-popup-flag';
+                img.src = flagSrc;
+                img.alt = '';
+                img.addEventListener('error', function() {
+                    const badge = document.createElement('div');
+                    badge.className = 'feature-popup-flag-badge';
+                    badge.style.background = getCountryColor(countryCode);
+                    badge.textContent = (countryCode || '??').slice(0, 2);
+                    if (img.parentNode) img.parentNode.replaceChild(badge, img);
+                });
+                wrap.appendChild(img);
+            } else {
+                const badge = document.createElement('div');
+                badge.className = 'feature-popup-flag-badge';
+                badge.style.background = getCountryColor(countryCode);
+                badge.textContent = (countryCode || '??').slice(0, 2);
+                wrap.appendChild(badge);
+            }
+
+            const shapeID = location ? location.shapeID : null;
+            wrap.appendChild(buildFeaturePopupRow(
+                getCountryColor(countryCode), countryName,
+                countryCode ? function() {
+                    if (activeFeaturePopup) map.closePopup(activeFeaturePopup);
+                    window.openCountryDetailPanel(countryCode);
+                } : null,
+                'Country details'
+            ));
+
+            if (location && location.provinceName) {
+                wrap.appendChild(buildFeaturePopupRow(
+                    null, location.provinceName,
+                    shapeID ? function() { flashProvinceLayer(shapeID); } : null,
+                    'Highlight on map'
+                ));
+            }
+
+            if (feature.kind === 'unit') {
+                const removeRow = document.createElement('div');
+                removeRow.className = 'feature-popup-remove-row';
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'feature-popup-remove-btn';
+                removeBtn.textContent = 'Remove Unit';
+                removeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    removeUnit(feature.unitId);
+                    if (activeFeaturePopup) map.closePopup(activeFeaturePopup);
+                });
+                removeRow.appendChild(removeBtn);
+                wrap.appendChild(removeRow);
+            }
+
+            return wrap;
+        }
+
+        function openFeatureInfoModal(feature) {
+            const location = findLocationInfo(feature.lon, feature.lat);
+            const countryCode = location ? location.countryCode : null;
+            const countryName = countryCode ? (countryLookup[countryCode] || countryCode) : 'Unknown';
+
+            if (activeFeaturePopup) {
+                map.closePopup(activeFeaturePopup);
+                activeFeaturePopup = null;
+            }
+
+            const content = buildFeaturePopupContent(feature, location, countryCode, countryName);
+            // autoPan is deliberately OFF: with it on, clicking near any edge of the
+            // viewport (much more common at high zoom, where the visible area is
+            // small) made Leaflet silently re-center the whole map to fit the
+            // popup — which reads as "my click bounced the map to a different
+            // place" even though the popup itself was correctly anchored the whole
+            // time. The popup should appear exactly where clicked and never move
+            // the camera on its own.
+            const popup = L.popup({
+                className: 'feature-popup',
+                closeButton: false,
+                autoPan: false,
+                offset: [0, -4]
+            })
+                .setLatLng([feature.lat, feature.lon])
+                .setContent(content)
+                .openOn(map);
+
+            activeFeaturePopup = popup;
+
+            // Keep the card's zoom-based scale current while it's open (see
+            // featurePopupScaleForZoom) — the popup's own position/anchoring is
+            // already handled natively by Leaflet on every zoom/pan.
+            if (activeFeaturePopupZoomHandler) map.off('zoom', activeFeaturePopupZoomHandler);
+            activeFeaturePopupZoomHandler = function() {
+                content.style.transform = 'scale(' + featurePopupScaleForZoom(map.getZoom()) + ')';
+            };
+            map.on('zoom', activeFeaturePopupZoomHandler);
+
+            popup.on('remove', function() {
+                if (activeFeaturePopupZoomHandler) {
+                    map.off('zoom', activeFeaturePopupZoomHandler);
+                    activeFeaturePopupZoomHandler = null;
+                }
+                if (activeFeaturePopup === popup) activeFeaturePopup = null;
+            });
+        }
+
+        // Builds one marker per city entry, offset by `offset` degrees longitude so the
+        // markers also appear on the +-360 "echo" world copies (same reasoning as
+        // buildCountryLabels). Actual position/size is computed every layout pass in
+        // updateFeatureLayout() — this just creates the DOM nodes and static metadata.
+        function buildCityMarkers(offset) {
+            const svgNS = 'http://www.w3.org/2000/svg';
+            cities.forEach(function(city) {
+                const latlng = L.latLng(city.lat, city.lon + offset);
+                // 4th-root-style log compression of population (15k up to ~25M) into a
+                // narrow, usable range — mirrors the same "compress a huge dynamic range"
+                // idea as the country label sizeMetric, just log-scaled since population
+                // (unlike bbox area) is already closer to log-normal in practice.
+                const sizeMetric = Math.log10(Math.max(city.pop, 1000));
+
+                const iconEl = document.createElementNS(svgNS, 'path');
+                iconEl.setAttribute('class', 'feature-icon ' + (city.capital ? 'capital-icon' : 'city-icon'));
+                iconEl.style.pointerEvents = 'auto';
+                iconEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    openFeatureInfoModal({ kind: 'city', name: city.name, capital: !!city.capital, lat: city.lat, lon: city.lon });
+                });
+                featureLayerEl.appendChild(iconEl);
+
+                const textEl = document.createElementNS(svgNS, 'text');
+                textEl.setAttribute('class', 'feature-label-text');
+                textEl.textContent = city.name;
+                textEl.style.pointerEvents = 'auto';
+                textEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    openFeatureInfoModal({ kind: 'city', name: city.name, capital: !!city.capital, lat: city.lat, lon: city.lon });
+                });
+                featureLayerEl.appendChild(textEl);
+
+                // `country` records the capital's ORIGINAL host nation (as of
+                // cities.json, i.e. game start) — used by updateFeatureLayout()'s
+                // capital star/square capture check to detect when the province
+                // this marker sits in now belongs to someone else.
+                cityMarkers.push({ kind: 'city', iconEl, textEl, latlng, name: city.name, capital: !!city.capital, sizeMetric, country: city.country });
+            });
+        }
+
+        // Same idea for player-placed military units, except these come from the
+        // in-memory `units` array (backed by localStorage) rather than a static file.
+        // Clicking now opens the same Map Feature popup as a city (with a Remove Unit
+        // button inside it) instead of deleting the unit instantly on click.
+        function buildUnitMarkers(offset) {
+            const svgNS = 'http://www.w3.org/2000/svg';
+            units.forEach(function(unit) {
+                const latlng = L.latLng(unit.lat, unit.lon + offset);
+
+                const iconEl = document.createElementNS(svgNS, 'path');
+                iconEl.setAttribute('class', 'feature-icon unit-icon');
+                iconEl.style.pointerEvents = 'auto';
+                iconEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    openFeatureInfoModal({ kind: 'unit', name: unit.name, unitId: unit.id, lat: unit.lat, lon: unit.lon });
+                });
+                featureLayerEl.appendChild(iconEl);
+
+                const textEl = document.createElementNS(svgNS, 'text');
+                textEl.setAttribute('class', 'feature-label-text unit-label');
+                textEl.textContent = unit.name;
+                textEl.style.pointerEvents = 'auto';
+                textEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    openFeatureInfoModal({ kind: 'unit', name: unit.name, unitId: unit.id, lat: unit.lat, lon: unit.lon });
+                });
+                featureLayerEl.appendChild(textEl);
+
+                // Fixed mid-size sizeMetric (no population concept for a player unit) so
+                // units render as a modest, consistent size relative to nearby cities,
+                // still scaled up/down by the Feature Size sliders like everything else.
+                unitMarkers.push({ kind: 'unit', iconEl, textEl, latlng, name: unit.name, unitId: unit.id, sizeMetric: 4.3 });
+            });
+        }
+
+        // Removes every unit marker's DOM nodes and rebuilds them from the current
+        // `units` array — simplest correct way to keep the WORLD_OFFSETS echo copies in
+        // sync whenever a unit is added or removed, given how few of these there'll ever
+        // realistically be (tens, not thousands).
+        function rebuildUnitMarkers() {
+            unitMarkers.forEach(function(m) {
+                if (m.iconEl.parentNode) m.iconEl.parentNode.removeChild(m.iconEl);
+                if (m.textEl.parentNode) m.textEl.parentNode.removeChild(m.textEl);
+            });
+            unitMarkers.length = 0;
+            [-360, 0, 360].forEach(function(offset) { buildUnitMarkers(offset); });
+        }
+
+        // Resolves a province/state name to a representative [lat, lon] center,
+        // for AI unit spawns that name a province rather than a known city (see
+        // spawnUnit() below). Tries an exact case-insensitive shapeName match
+        // first, then substring, optionally scoped to countryCode first (so e.g.
+        // two differently-owned provinces that happen to share a name resolve to
+        // the right one) before falling back to a global search. Prefers the
+        // already-built Leaflet layer's bounds center (cheap, already computed)
+        // over re-deriving a centroid from raw geometry.
+        function findProvinceCenterByName(name, countryCode) {
+            if (!name || !targetObject) return null;
+            const target = String(name).trim().toLowerCase();
+
+            function search(scopedToCountry) {
+                let exactId = null, partialId = null;
+                for (let i = 0; i < targetObject.geometries.length; i++) {
+                    const props = targetObject.geometries[i].properties;
+                    if (scopedToCountry && getEffectiveCountry(props.shapeID, props.shapeGroup) !== scopedToCountry) continue;
+                    const shapeName = (props.shapeName || '').toLowerCase();
+                    if (shapeName === target) { exactId = props.shapeID; break; }
+                    if (!partialId && (shapeName.includes(target) || target.includes(shapeName))) partialId = props.shapeID;
+                }
+                return exactId || partialId;
+            }
+
+            const shapeID = (countryCode && search(countryCode)) || search(null);
+            if (!shapeID) return null;
+            const layer = provinceLayerById[shapeID];
+            if (layer && layer.getBounds) {
+                const c = layer.getBounds().getCenter();
+                return [c.lat, c.lng];
+            }
+            return null;
+        }
+
+        // Bridge called by game.js's runJumpForward() when the AI's response
+        // includes a unitSpawns entry — resolves a named location (a known city,
+        // falling back to a province/state name) to real map coordinates and
+        // drops a new military unit marker there, exactly like a player manually
+        // placing one via "Place a military unit" (see addUnitAtLatLng()), just
+        // triggered by the AI's narrative instead of a click. game.js's IIFE
+        // can't reach this file's top-level functions' internals directly except
+        // through free variables it already shares (cities, units,
+        // provinceLayerById, etc.) — but it has no way to call a *function*
+        // defined here unless it's explicitly exposed on window, hence
+        // `window.spawnUnit` at the bottom of this function.
+        function spawnUnit(name, locationName, countryCode) {
+            if (!name || !locationName) return false;
+
+            const target = String(locationName).trim().toLowerCase();
+            let coords = null;
+            const cityMatch = (cities || []).find(function(c) { return c.name && c.name.toLowerCase() === target; }) ||
+                (cities || []).find(function(c) { return c.name && c.name.toLowerCase().includes(target); });
+            if (cityMatch) {
+                coords = [cityMatch.lat, cityMatch.lon];
+            } else {
+                coords = findProvinceCenterByName(locationName, countryCode);
+            }
+
+            if (!coords && countryCode) {
+                // Safeguard fallback: the named city/province lookup above failed
+                // (AI gave a location name that doesn't match anything), so spawn
+                // at the center of the target country's first available province
+                // instead of silently dropping the unit.
+                for (let i = 0; i < targetObject.geometries.length; i++) {
+                    const props = targetObject.geometries[i].properties;
+                    if (getEffectiveCountry(props.shapeID, props.shapeGroup) === countryCode) {
+                        const layer = provinceLayerById[props.shapeID];
+                        if (layer && layer.getBounds) {
+                            const c = layer.getBounds().getCenter();
+                            coords = [c.lat, c.lng];
+                            console.log('spawnUnit fallback: location "' + locationName + '" not resolved. Spawning at country province center.');
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!coords) {
+                console.warn('spawnUnit: could not resolve location "' + locationName + '" for unit "' + name + '" — skipping.');
+                return false;
+            }
+
+            units.push({
+                id: 'unit-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                lat: coords[0],
+                lon: coords[1],
+                name: name
+            });
+            saveUnitsToStorage();
+            rebuildUnitMarkers();
+            updateFeatureLayout();
+            return true;
+        }
+        window.spawnUnit = spawnUnit;
+
+        function loadUnitsFromStorage() {
+            try {
+                const raw = localStorage.getItem(UNITS_STORAGE_KEY);
+                if (!raw) return [];
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                console.warn('Failed to load saved military units:', e);
+                return [];
+            }
+        }
+        function saveUnitsToStorage() {
+            try {
+                localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(units));
+            } catch (e) {
+                console.warn('Failed to save military units:', e);
+            }
+        }
+
+        // Suggests a default unit name from the nearest known city ("Allentown" ->
+        // "Allentown Unit"), so player-created units are
+        // named after where they were raised/stationed — the player can still overwrite
+        // it in the prompt.
+        function findNearestCityName(lat, lon) {
+            let best = null, bestDist = Infinity;
+            cities.forEach(function(c) {
+                const dLat = c.lat - lat, dLon = c.lon - lon;
+                const dist = dLat * dLat + dLon * dLon;
+                if (dist < bestDist) { bestDist = dist; best = c; }
+            });
+            return best ? best.name : 'New';
+        }
+
+        // Themed replacement for window.prompt() — a real native prompt()/confirm()
+        // blocks the page's own JS thread until the person answers it, which both
+        // looks jarringly out of place next to the rest of this atlas-styled UI and
+        // can't be driven by anything that automates the page (browser extensions,
+        // testing tools, etc. only control the page, not the browser chrome's own
+        // dialog surface). Returns a Promise resolving to the entered name, or null
+        // if the person cancels.
+        function promptUnitName(suggestion) {
+            return new Promise(function(resolve) {
+                const overlay = document.getElementById('unit-name-modal');
+                const input = document.getElementById('unit-name-input');
+                const confirmBtn = document.getElementById('unit-name-confirm');
+                const cancelBtn = document.getElementById('unit-name-cancel');
+
+                input.value = suggestion;
+                overlay.classList.add('open');
+                input.focus();
+                input.select();
+
+                function cleanup(result) {
+                    overlay.classList.remove('open');
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    input.removeEventListener('keydown', onKeydown);
+                    resolve(result);
+                }
+                function onConfirm() { cleanup(input.value.trim() || null); }
+                function onCancel() { cleanup(null); }
+                function onKeydown(e) {
+                    if (e.key === 'Enter') onConfirm();
+                    else if (e.key === 'Escape') onCancel();
+                }
+                confirmBtn.addEventListener('click', onConfirm);
+                cancelBtn.addEventListener('click', onCancel);
+                input.addEventListener('keydown', onKeydown);
+            });
+        }
+
+        async function addUnitAtLatLng(latlng) {
+            const suggestion = findNearestCityName(latlng.lat, latlng.lng) + ' Unit';
+            const name = await promptUnitName(suggestion);
+            if (!name) return; // cancelled
+            units.push({
+                id: 'unit-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                lat: latlng.lat,
+                lon: latlng.lng,
+                name: name
+            });
+            saveUnitsToStorage();
+            rebuildUnitMarkers();
+            updateFeatureLayout();
+        }
+
+        function removeUnit(unitId) {
+            units = units.filter(function(u) { return u.id !== unitId; });
+            saveUnitsToStorage();
+            rebuildUnitMarkers();
+            updateFeatureLayout();
+        }
+
+        // Positions/sizes every city + unit marker for the current zoom/pan state, then
+        // runs the same greedy "bigger claims space first" declutter pass used for
+        // country labels so dense city clusters don't turn into an unreadable pile of
+        // overlapping icons.
+        function updateFeatureLayout() {
+            if (!map) return;
+            const allMarkers = cityMarkers.concat(unitMarkers);
+            if (allMarkers.length === 0) return;
+
+            const zoom = map.getZoom();
+
+            // By design: at the world/continent zoom band (levels
+            // 1-3 — in practice 2-3, since initMap() sets minZoom:2) nothing should
+            // render except country name labels, which live in a separate system
+            // (updateLabelLayout(), driven by countryLabelsCache) and aren't
+            // touched by this function at all. So below that threshold we skip
+            // straight to hiding every city/capital/unit marker and bail out
+            // entirely — also a perf win, since none of the candidate/collision
+            // work below ever needs to run at this zoom band.
+            if (zoom <= 3) {
+                allMarkers.forEach(function(m) {
+                    m.iconEl.style.opacity = '0';
+                    m.textEl.style.opacity = '0';
+                });
+                return;
+            }
+
+            const zoomScale = Math.pow(2, zoom - 3);
+            const CHAR_W = 0.55;
+
+            // Viewport culling — with the expanded city dataset there can be
+            // thousands of markers (across all WORLD_OFFSETS copies) that simply
+            // aren't on screen at any given moment. Skipping the fontSize/collision
+            // work for them entirely keeps this function's cost proportional to
+            // what's actually visible, not the total dataset size — the same
+            // "never do per-entity work off-screen" trick that lets HOI4/Vic-style
+            // engines render tens of thousands of provinces/cities without lag
+            // (they bake the map and cull aggressively rather than touching every
+            // entity every frame). Padding avoids markers popping in/out abruptly
+            // right at the edge while panning.
+            const mapSize = map.getSize();
+            const CULL_PAD = 150;
+
+            const candidates = [];
+            allMarkers.forEach(function(m) {
+                // fontSize depends only on population/zoom/settings — never on the
+                // marker's screen position — so compute it FIRST, before touching
+                // Leaflet's projection functions at all. At low zoom, most of the
+                // 16k+ markers (across all WORLD_OFFSETS copies) fail this check;
+                // skipping straight to "hidden" for them means the viewport-culling
+                // check below (which calls latLngToContainerPoint — the actual
+                // expensive part, ~16k calls' worth at world zoom where nothing is
+                // off-screen to cull) never runs for markers that were always going
+                // to be invisible anyway, regardless of where they sit on screen.
+                const priorityBoost = m.capital ? 0.4 : 0;
+                const fontSize = clamp(
+                    1.0 * mapSettings.featureSizeAbsolute
+                        + 1.5 * (m.sizeMetric + priorityBoost) * mapSettings.featureSizeRelative * zoomScale,
+                    0, 26
+                );
+                if (fontSize < 6) {
+                    m.iconEl.style.opacity = '0';
+                    m.textEl.style.opacity = '0';
+                    return;
+                }
+
+                const containerPt = map.latLngToContainerPoint(m.latlng);
+                if (containerPt.x < -CULL_PAD || containerPt.x > mapSize.x + CULL_PAD ||
+                    containerPt.y < -CULL_PAD || containerPt.y > mapSize.y + CULL_PAD) {
+                    m.iconEl.style.opacity = '0';
+                    m.textEl.style.opacity = '0';
+                    return;
+                }
+                const pt = map.latLngToLayerPoint(m.latlng);
+                const iconR = Math.max(2, fontSize * 0.42) * (m.kind === 'unit' ? 0.9 : (m.capital ? 1.15 : 1));
+                const estWidth = m.name.length * fontSize * CHAR_W * 0.72;
+                const halfW = Math.max(iconR, estWidth / 2);
+                const halfH = iconR + fontSize * 0.6; // icon + label stacked vertically
+                const radius = Math.hypot(halfW, halfH);
+                candidates.push({ m, pt, fontSize, iconR, radius });
+            });
+
+            candidates.sort(function(a, b) { return b.fontSize - a.fontSize; });
+            const placed = [];
+            candidates.forEach(function(c) {
+                const collides = placed.some(function(p) {
+                    const d = Math.hypot(c.pt.x - p.pt.x, c.pt.y - p.pt.y);
+                    return d < (c.radius + p.radius) * 0.72;
+                });
+                if (collides) {
+                    c.m.iconEl.style.opacity = '0';
+                    c.m.textEl.style.opacity = '0';
+                    return;
+                }
+                placed.push(c);
+
+                const m = c.m, cx = c.pt.x, cy = c.pt.y;
+                // Capital capture check: a capital renders as a Star per the game
+                // rules, but flips to a Square/Diamond once its province
+                // is no longer held by its original host nation (conquered/
+                // occupied). Only runs for capitals that made it past culling and
+                // decluttering above (never the full ~200-capital set every
+                // frame), and even then only re-checks ownership when
+                // ownershipEpoch has actually advanced since the last check (see
+                // rebuildCountryLayers()) — otherwise reuses the cached verdict,
+                // so a capital's shape doesn't cost a fresh point-in-polygon scan
+                // on every zoom/pan once its owner is already known.
+                let capitalCaptured = false;
+                if (m.capital && m.country) {
+                    if (m.__capEpoch !== ownershipEpoch) {
+                        const info = findLocationInfo(m.latlng.lng, m.latlng.lat);
+                        m.__captured = !!(info && info.countryCode && info.countryCode !== m.country);
+                        m.__capEpoch = ownershipEpoch;
+                    }
+                    capitalCaptured = m.__captured;
+                }
+                const d = m.kind === 'unit'
+                    ? squarePathD(cx, cy, c.iconR)
+                    : ((m.capital && !capitalCaptured) ? starPathD(cx, cy, c.iconR) : diamondPathD(cx, cy, c.iconR));
+                m.iconEl.setAttribute('d', d);
+                m.iconEl.style.opacity = '1';
+
+                m.textEl.setAttribute('x', cx);
+                m.textEl.setAttribute('y', cy + c.iconR + c.fontSize * 0.85);
+                m.textEl.style.fontSize = c.fontSize + 'px';
+                m.textEl.style.opacity = '1';
+            });
+        }
+
+        // Toggleable "place a unit" mode: click the button, then click anywhere on the
+        // map to drop a unit there (prompted for a name), so a player can
+        // declare where their own military units are.
+        function initUnitPlacement() {
+            const btn = document.getElementById('add-unit-toggle');
+            btn.addEventListener('click', function() {
+                placingUnit = !placingUnit;
+                btn.style.background = placingUnit ? 'rgba(182,57,47,0.85)' : '';
+                map.getContainer().classList.toggle('placing-unit-cursor', placingUnit);
+            });
+            map.on('click', function(e) {
+                if (!placingUnit) return;
+                placingUnit = false;
+                btn.style.background = '';
+                map.getContainer().classList.remove('placing-unit-cursor');
+                addUnitAtLatLng(e.latlng);
+            });
+        }
+
+        // Bare-map click (not on a unit/city marker, which already stopPropagation
+        // their own click handlers, and not while in unit-placement mode) opens the
+        // same Map Feature popup as a marker click — just country + containing
+        // province, matching the original reference screenshots where no marker was
+        // involved at all.
+        function initBareMapClickPopup() {
+            map.on('click', function(e) {
+                if (placingUnit) return;
+                // Ocean/water clicks land inside no ADM2 polygon at all — findLocationInfo
+                // returns null — so there's nothing meaningful to show. Previously this
+                // still opened the popup with a "??" flag and "Unknown" country, which
+                // read as a bug rather than an empty-water click. City/unit marker clicks
+                // go through their own handlers (buildCityMarkers/buildUnitMarkers), not
+                // this one, so they're unaffected by this check.
+                if (!findLocationInfo(e.latlng.lng, e.latlng.lat)) {
+                    if (activeFeaturePopup) map.closePopup(activeFeaturePopup);
+                    return;
+                }
+                openFeatureInfoModal({ kind: 'location', name: '', lat: e.latlng.lat, lon: e.latlng.lng });
+            });
+        }
+
+        function updateLoaderText(text) {
+            document.getElementById('loader-text').innerText = text;
+        }
+
+        // 7. Map & Display settings panel wiring
+        function restyleBorders() {
+            // Re-running each layer's own style function (rather than a flat setStyle
+            // object) preserves the zoom-dependent color/dash logic already baked into
+            // the municipality style function above — only the weight actually changes.
+            if (municipalityLayer) {
+                municipalityLayer.eachLayer(function(layer) {
+                    const currentZoom = map.getZoom();
+                    const zoomedIn = currentZoom >= ZOOM_THRESHOLD;
+                    layer.setStyle({
+                        weight: (zoomedIn ? BASE_MUNICIPALITY_WEIGHT_ZOOMED : BASE_MUNICIPALITY_WEIGHT_UNZOOMED) * mapSettings.borderSize
+                    });
+                });
+            }
+            countryBorderLayers.forEach(function(layer) {
+                layer.setStyle({ weight: BASE_COUNTRY_BORDER_WEIGHT * mapSettings.borderSize });
+            });
+        }
+
+        function initSettingsPanel() {
+            const toggleBtn = document.getElementById('settings-toggle');
+            const panel = document.getElementById('settings-panel');
+            toggleBtn.addEventListener('click', function() {
+                panel.classList.toggle('open');
+            });
+            // Click-away closes the panel, without swallowing clicks on the toggle
+            // button itself (which has its own listener above) or inside the panel.
+            document.addEventListener('click', function(e) {
+                if (!panel.classList.contains('open')) return;
+                if (panel.contains(e.target) || toggleBtn.contains(e.target)) return;
+                panel.classList.remove('open');
+            });
+
+            // Fullscreen toggle
+            const fsBtn = document.getElementById('fullscreen-toggle');
+            fsBtn.addEventListener('click', function() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(function() {});
+                } else {
+                    document.exitFullscreen().catch(function() {});
+                }
+            });
+            document.addEventListener('fullscreenchange', function() {
+                const isFs = !!document.fullscreenElement;
+                fsBtn.setAttribute('aria-pressed', isFs ? 'true' : 'false');
+            });
+
+            // Zoom Sensitivity
+            document.getElementById('zoom-sensitivity').addEventListener('input', function(e) {
+                mapSettings.zoomSensitivity = Number(e.target.value);
+                map.options.wheelPxPerZoomLevel = zoomSensitivityToWheelPx(mapSettings.zoomSensitivity);
+            });
+
+            // Border Size
+            document.getElementById('border-size').addEventListener('input', function(e) {
+                mapSettings.borderSize = Number(e.target.value);
+                restyleBorders();
+            });
+
+            // Feature Size (Relative) — how much a city's real population drives its
+            // icon/label size. Controls city + military-unit markers, NOT country names
+            // (see updateFeatureLayout()).
+            document.getElementById('feature-size-relative').addEventListener('input', function(e) {
+                mapSettings.featureSizeRelative = Number(e.target.value);
+                updateFeatureLayout();
+            });
+
+            // Feature Size (Absolute) — flat baseline size every city/unit marker gets
+            // regardless of population.
+            document.getElementById('feature-size-absolute').addEventListener('input', function(e) {
+                mapSettings.featureSizeAbsolute = Number(e.target.value);
+                updateFeatureLayout();
+            });
+        }
+
+        // Temporary dev/perf HUD — live FPS (rolling ~2x/sec average, so the
+        // number doesn't flicker every frame) and the map's exact current zoom
+        // level (fractional, since trackpad/scroll-wheel zoom can land between
+        // integers) — printed to a small fixed corner readout so exact zoom
+        // thresholds for city icons/labels/municipality layer/etc can be read
+        // off directly instead of guessed. Remove this block (and the
+        // #debug-hud element/CSS) once no longer needed.
+        let debugFpsEl, debugZoomEl;
+        let debugFrameCount = 0;
+        let debugFpsSampleStart = performance.now();
+        function debugHudFrameLoop(now) {
+            debugFrameCount++;
+            const elapsed = now - debugFpsSampleStart;
+            if (elapsed >= 500) {
+                const fps = Math.round((debugFrameCount * 1000) / elapsed);
+                if (debugFpsEl) debugFpsEl.textContent = fps + ' FPS';
+                debugFrameCount = 0;
+                debugFpsSampleStart = now;
+            }
+            requestAnimationFrame(debugHudFrameLoop);
+        }
+        function updateDebugZoomReadout() {
+            if (debugZoomEl && map) debugZoomEl.textContent = 'zoom ' + map.getZoom().toFixed(2);
+        }
+        function initDebugHud() {
+            debugFpsEl = document.getElementById('debug-fps');
+            debugZoomEl = document.getElementById('debug-zoom');
+            if (!debugFpsEl || !debugZoomEl) return;
+            requestAnimationFrame(debugHudFrameLoop);
+            map.on('zoom', updateDebugZoomReadout);
+            map.on('move', updateDebugZoomReadout);
+            updateDebugZoomReadout();
+        }
+
+        // Run engine pipeline on initialization
+        window.onload = function() {
+            initMap();
+            loadMapData();
+            initSettingsPanel();
+            initUnitPlacement();
+            initBareMapClickPopup();
+            initDebugHud();
+        };
+    </script>
+</body>
+</html>
